@@ -1,0 +1,81 @@
+---
+title: "CONSIGN: PMR Curation"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# load bases-----------------------------------------------------------------
+miva_00 <- fread(file.path(path_origenes_consign, 
+            "REDMIVA", 
+            "SD2270_RedMIVA.enc.txt")) %>% 
+  # cambiar a minúsculas  
+  clean_names("snake")  
+
+```
+
+```{r}
+# clean base-----------------------------------------------------------------
+redmiva <- miva_00 %>%
+  mutate(
+    fecha_prueba = ymd(fecha_prueba),
+    fecha_resultado = ymd(fecha_resultado)
+      ) 
+
+```
+
+# save base
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# write table----------------------------------------------------------------
+fwrite(redmiva, append = FALSE, file = file.path("Origin_tables", 
+                                                 "redmiva.csv"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_14_REDMIVA_Curation_CONSIGN.qmd"))
+file.copy(from = file.path("1_14_REDMIVA_Curation_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```

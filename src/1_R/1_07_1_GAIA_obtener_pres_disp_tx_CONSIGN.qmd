@@ -1,0 +1,186 @@
+---
+title: "CONSIGN: GAIA Curation. Part I"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes-----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+## Pres
+
+```{r}
+# Load prescription----------------------------------------------------------
+pres_1 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "PRESCRIPCION", "v4",
+            "SIS_31692_SD2270_GAIA_PRESCR_SUB_00_09.sql.enc.enc.enc.log")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+pres_2 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "PRESCRIPCION", "v4",
+            "SIS_31692_SD2270_GAIA_PRESCR_SUB_62_69.sql.enc.enc.enc.log")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+pres_3 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "PRESCRIPCION", "v4",
+            "SIS_31692_SD2270_GAIA_PRESCR_SUB_70_79.sql.enc.enc.enc.log")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+pres_4 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "PRESCRIPCION", "v4",
+            "SIS_31692_SD2270_GAIA_PRESCR_SUB_80_89.sql.enc.enc.enc.log")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+pres_5 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "PRESCRIPCION", "v4",
+            "SIS_31692_SD2270_GAIA_PRESCR_SUB_90_99.sql.enc.enc.enc.log")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+```
+
+```{r}
+# join pres------------------------------------------------------------------
+pres_v4 <- rbindlist(
+  list(
+    pres_1,
+    pres_2,
+    pres_3,
+    pres_4,
+    pres_5))
+
+```
+
+```{r}
+# save pres------------------------------------------------------------------
+fwrite(pres_v4, file.path("Origin_tables", "auxiliar", "pres_v4.csv"))
+
+```
+
+## Disp
+
+```{r}
+# Load dispensation----------------------------------------------------------
+disp_1 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "RELE", "v3",
+            "SIS_31692_SD2270_GAIA_RELE_SUB_01_09.sql.log.enc.enc.txt")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+disp_2 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "RELE", "v3",
+            "SIS_31692_SD2270_GAIA_RELE_SUB_62_69.sql.log.enc.enc.txt")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+disp_3 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "RELE", "v3",
+            "SIS_31692_SD2270_GAIA_RELE_SUB_62_69_A_B.sql.log.enc.enc.txt")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+disp_4 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "RELE", "v3",
+            "SIS_31692_SD2270_GAIA_RELE_SUB_70_80.sql.log.enc.enc.txt")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+disp_5 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "RELE", "v3",
+            "SIS_31692_SD2270_GAIA_RELE_SUB_81_90.sql.log.enc.enc.txt")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+disp_6 <- fread(file.path(path_origenes_consign, 
+            "GAIA", "RELE", "v3",
+            "SIS_31692_SD2270_GAIA_RELE_SUB_91_00.sql.log.enc.enc.txt")) |> 
+  # change to lower case  
+  clean_names("snake")  
+
+```
+
+
+```{r}
+# join disp------------------------------------------------------------------
+disp_v3 <- rbindlist(
+  list(
+    disp_1,
+    disp_2,
+    disp_3,
+    disp_4,
+    disp_5,
+    disp_6
+  ))
+
+```
+
+
+```{r}
+# save disp------------------------------------------------------------------
+fwrite(disp_v3, file.path("Origin_tables", "auxiliar", "disp_v3.csv"))
+
+```
+
+## Tx
+
+Is only one file.
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_07_1_GAIA_obtener_pres_disp_tx_CONSIGN.qmd"))
+file.copy(from = file.path("1_07_1_GAIA_obtener_pres_disp_tx_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

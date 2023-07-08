@@ -1,0 +1,195 @@
+---
+title: "CONSIGN: MDR Curation"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+path_origenes_pregval <- file.path( "F:", "CERES2", "PREGVAL", 
+                                    "1-DATOS", "1-BRUTOS")
+
+
+```
+
+```{r}
+# cargar_bases---------------------------------------------------------------
+mdr_00 <- fread(file.path(path_origenes_pregval, 
+            "09_MDR", "TODO_EL_PERIODO", "V99",
+            "METABOLOPATIAS_PREGVAL_2009_2022.enc.txt")) |> 
+  # change to lower case  
+  clean_names("snake")
+
+```
+
+
+```{r}
+# check mdr_00---------------------------------------------------------------
+mdr_00 |> count(talon)
+mdr_00 |> count(hospital_nac, hospital_muestra)
+mdr_00 |> count(hospital_nac)
+mdr_00 |> count(hospital_muestra)
+
+```
+
+```{r}
+# fix base-------------------------------------------------------------------
+mdr_0 <- mdr_00 |>
+  # remove hospital_muestra and talon
+  select(-hospital_muestra, -talon) |> 
+  # rename variables
+  rename(
+    sip_madre = sip,
+    sip_hijo = sip_hijo,
+    fecha_nac_hijo = fecha_nacimiento,
+    semana_gest = semana_gest,
+    peso = peso_nac,
+    edad_madre = edad_mat,
+    hospital_nacimiento_desc = hospital_nac) |> 
+  mutate(fecha_nac_hijo = ymd(fecha_nac_hijo)) |> 
+  select(sip_madre,
+           sip_hijo,
+           fecha_nac_hijo,
+           semana_gest,
+           peso,
+           edad_madre,
+           hospital_nacimiento_desc) 
+
+```
+
+# Fix MDR
+
+```{r}
+# fix mdr--------------------------------------------------------------------
+# fix semana_gest
+mdr_0 |> count(semana_gest)
+# fix na sip madre
+mdr_0 |> count(sip_madre, sort = TRUE)
+mdr_0 |> count(sip_hijo, sort = TRUE)
+
+mdr_1 <- mdr_0 |> 
+  # fix semana_gest
+  mutate(semana_gest = if_else(semana_gest < 3 | semana_gest > 45, 
+                               NA_integer_, semana_gest)) |> 
+  # exclude birth without sip_madre
+  filter(sip_madre != "RFqwh4PcfAcSBlICoKtN/w==") |> 
+  # convert to NA when sip_hijo is
+  mutate(sip_hijo = if_else(sip_hijo == "RFqwh4PcfAcSBlICoKtN/w==", 
+                            NA_character_, sip_hijo))
+
+mdr_1 |> count(semana_gest)
+mdr_1 |> count(sip_madre, sort = TRUE)
+# twins
+mdr_1 |> filter(!is.na(sip_hijo)) |> add_count(sip_hijo, sort = TRUE) |>
+  filter(n > 1)
+
+mdr_gemelos_con_sip_hijo_faltante <- mdr_1 |> 
+  filter(is.na(sip_hijo)) |> 
+  add_count(sip_madre) |> 
+  filter(n > 1) |> 
+  arrange(sip_madre) |> 
+  select(-n)
+
+mdr_full <- mdr_1 |>
+  # remove momentaneously twins with missing sip
+  anti_join(mdr_gemelos_con_sip_hijo_faltante) |> 
+  # group duplicated rows with different information but the same birth
+  group_by(sip_madre, sip_hijo) |> 
+  summarise(across(.cols = everything(), ~first(na.omit(.))), 
+            .groups = "drop") |> 
+  add_count(sip_hijo) |> 
+  mutate(sip_hijo = if_else(n > 1, NA_character_, sip_hijo)) |> 
+  select(-n) |>
+  # recover twins with missing sip
+  union(mdr_gemelos_con_sip_hijo_faltante)
+
+mdr_full |> add_count(sip_hijo, sort = TRUE)
+mdr_full |> 
+  filter(is.na(sip_hijo)) |> 
+  add_count(sip_madre) |> 
+  filter(n > 1) |> 
+  arrange(sip_madre)
+
+```
+
+# Save base
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(mdr_full, append = FALSE, 
+       file = file.path("Origin_tables", "auxiliar", "mdr_full.csv"))
+
+```
+
+```{r}
+# write consign table--------------------------------------------------------
+mdr <- mdr_full |> filter(fecha_nac_hijo >= ymd("2018-01-01"))
+
+mdr |> count(year(fecha_nac_hijo))
+
+```
+
+```{r}
+# save mdr consign-----------------------------------------------------------
+fwrite(mdr, append = FALSE, 
+       file = file.path("Origin_tables", "mdr.csv"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_09_MDR_Curation_CONSIGN.qmd"))
+file.copy(from = file.path("1_09_MDR_Curation_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>
+
+
+

@@ -1,0 +1,2448 @@
+---
+title: "OMOP ETL Implementation: CONSIGN"
+author: "Francisco Sanchez-Saez"
+date: "last-modified"
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    highlight-style: breeze
+    css: style.css
+    embed-resources: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions-----------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+
+```
+
+# Load source tables: part one
+
+The following origin tables contain data from the CONSIGN project. In the first part, we load **SIP** and **MBDS** origin tables.
+
+```{r}
+# select origin_tables or samples--------------------------------------------
+origin_tables <- file.path("..", "consign", "Origin_tables")
+
+```
+
+```{r}
+# load tables----------------------------------------------------------------
+# first part
+sip       <- fread(file.path(origin_tables, "sip.csv"), encoding = "UTF-8")
+mbds      <- fread(file.path(origin_tables, "mbds.csv"), encoding = "UTF-8")
+# pmr       <- fread(file.path(origin_tables, "pmr.csv"), encoding = "UTF-8")
+sips_consign <- readRDS(file.path("..", "consign", "Resultados", "sips",
+                                  "sips_consign.RDS"))
+
+```
+
+Initiate the data transformation process by creating the **care_site** target table. This step is necessary as we need to define the **care_site_id**, which will be used in the **person** table.
+
+# care_site
+
+## From sip to care_site
+
+```{r}
+# populate table-------------------------------------------------------------
+from_sip_to_care_site <- sip |>
+  distinct(dpto_salud, zona_salud) |> 
+  separate_wider_delim(dpto_salud, delim = ":", 
+                       names = c("dpto_salud_cod", "dpto_salud_desc"),
+                       too_few = "align_start", cols_remove = FALSE) |> 
+  separate_wider_delim(zona_salud, delim = ":",
+                       names = c("zona_salud_cod", "zona_salud_desc"),
+                       too_few = "align_start", cols_remove = FALSE) |>
+  mutate(across(c(dpto_salud_cod, zona_salud_cod), as.integer)) |> 
+  arrange(dpto_salud_cod, zona_salud_cod) |> 
+  transmute(
+         care_site_id = 1:n(),
+         care_site_name = glue("{dpto_salud_desc}; {zona_salud_desc}"),
+         place_of_service_concept_id = 38004226,
+         location_id = NA_integer_,
+         care_site_source_value = glue("{dpto_salud_cod}; {zona_salud_cod}"),
+         place_of_service_source_value = "Zona básica de salud",
+         dpto_salud,
+         zona_salud
+         )
+
+last_sip_care_site_id <- max(from_sip_to_care_site$care_site_id)
+
+```
+
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_sip_to_care_site, file = file.path("Target_tables",
+       "AUXILIAR", "from_sip_to_care_site.csv"))
+
+from_sip_to_care_site_write <- from_sip_to_care_site |> 
+  select(-dpto_salud, -zona_salud)
+
+fwrite(from_sip_to_care_site_write, append = FALSE,
+       file = file.path("Target_tables",
+                        "care_site_vid.csv"))
+
+```
+
+## From mbds (hospitals) to care_site
+
+```{r}
+# load master of hospital_cod to obtain hospital names-----------------------
+master_hospitals <- read_excel(file.path("z:", "0-RECURSOS", "4-MAESTROS", 
+                     "Hospitales_codigo.xlsx")) |> 
+  clean_names() |> 
+  transmute(hosp_cod = cent_cod |> as.integer(),
+            hosp_desc = centdesc_lar) |> 
+  arrange(hosp_cod)
+
+```
+
+
+```{r}
+# populate table-------------------------------------------------------------
+from_mbds_to_care_site <- master_hospitals |> 
+  transmute(
+         care_site_id = 1:n() + last_sip_care_site_id,
+         care_site_name = str_remove_all(hosp_desc, ","),
+         place_of_service_concept_id = 38004515,
+         location_id = NA_integer_,
+         care_site_source_value = hosp_cod,
+         place_of_service_source_value = "Hospital"
+         )
+
+# write table----------------------------------------------------------------
+fwrite(from_mbds_to_care_site, append = TRUE,
+       file = file.path("Target_tables",
+                        "care_site_vid.csv"))
+
+```
+
+<br>
+
+Next, we proceed with the creation of the **person** target table. This table will store the information related to individuals in our dataset.
+
+# person
+
+## From sip to person
+
+```{r}
+# populate table-------------------------------------------------------------
+from_sip_to_person <- sip |>
+  select(sip,
+         fecha_nacimiento,
+         fecha_defuncion,
+         pais_nacimiento,
+         sexo,
+         fecha_calculo,
+         dpto_salud,
+         zona_salud) |>
+  # fill care_site_id
+  mutate(care_site_source_value = glue("{dpto_salud}; {zona_salud}")) |>
+  left_join(from_sip_to_care_site |> 
+              select(care_site_id, dpto_salud, zona_salud),
+            by = c("dpto_salud", "zona_salud")) |> 
+  # select 'fecha_nacimiento', 'fecha_defuncion', and 'pais_nacimiento' updated)
+  group_by(sip) |> 
+  slice(which.max(fecha_calculo)) |> 
+  ungroup() |> 
+  transmute(person_id = 1:n(),
+            gender_concept_id = case_when(sexo == 'Male' ~ 8507, 
+                                          sexo == 'Female' ~ 8532, 
+                                          T ~ NA_integer_),
+            year_of_birth	 = str_sub(fecha_nacimiento, 1, 4) |> as.integer(),
+            month_of_birth = str_sub(fecha_nacimiento, 6, 7) |> as.integer(),
+            day_of_birth   = str_sub(fecha_nacimiento, 9, 10) |> as.integer(),
+            birth_datetime = fecha_nacimiento,
+            race_concept_id = 0,
+            ethnicity_concept_id = 0,
+            location_id = NA_integer_,
+            provider_id = NA_integer_,
+            care_site_id = care_site_id,
+            person_source_value = sip,
+            gender_source_value = sexo,
+            gender_source_concept_id = 0,
+            race_source_value = NA_character_,
+            race_source_concept_id = 0,
+            ethnicity_source_value = NA_character_,
+            ethnicity_source_concept_id = 0,
+            fecha_defuncion
+            )
+
+# write table----------------------------------------------------------------
+fwrite(from_sip_to_person, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_sip_to_person.csv"))
+
+# save person_id <-> sip relationship
+person_ids <- from_sip_to_person |> select(person_id, person_source_value) 
+
+fwrite(person_ids, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "person_ids.csv"))
+
+person_ids <- fread(file = file.path("Target_tables", "AUXILIAR",
+                        "person_ids.csv"))
+
+
+from_sip_to_person_write <- from_sip_to_person |> select(-fecha_defuncion)
+
+# write table----------------------------------------------------------------
+fwrite(from_sip_to_person_write, append = FALSE,
+       file = file.path("Target_tables",
+                        "person_vid.csv"))
+
+
+```
+
+# observation_period
+
+## From sip to observation_period
+
+```{r}
+# # union of consecutive years with observation------------------------------
+# sip_periods_0 <- sip |>
+#   select(sip, fecha_calculo) |>
+#   mutate(inicio = ymd(glue("{year(fecha_calculo)}0101")),
+#          final = fecha_calculo %m+% days(1)) |>
+#   group_by(sip) |>
+#   mutate(periodo = c(1, 1 + cumsum(as.numeric(lead(inicio)) >
+#                               cummax(as.numeric(final)))[-n()])) |>
+#   group_by(sip, periodo) |>
+#   summarise(min_inicio = min(inicio),
+#             max_final = max(final) %m-% days(1)) |>
+#   ungroup() |>
+# # transform sip_grouped----------------------------------------------------
+# rename(fecha_inicio = min_inicio,
+#        fecha_fin = max_final) |>
+# # add fecha_defuncion
+# left_join((sip |> distinct(sip, fecha_defuncion))) |>
+#   tidylog::distinct() |>
+#   mutate(fecha_fin = pmin(fecha_fin, fecha_defuncion, na.rm = TRUE))
+# 
+# # check distinct periods and death date------------------------------------
+# sip_periods_0 |> count(periodo)
+# sip_periods_0 |> filter(!is.na(fecha_defuncion))
+# 
+# # write table--------------------------------------------------------------
+# fwrite(sip_periods_0, append = FALSE,
+#        file = file.path("Target_tables", "AUXILIAR",
+#                         "sip_periods_0.csv"))
+# 
+# sip_periods_0 <- fread(x = file.path("Target_tables", "AUXILIAR",
+#                          "sip_periods_0.csv"))
+
+```
+
+```{r}
+# # add info of activations--------------------------------------------------
+# path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270",
+#                                     "1-DATOS", "1-BRUTOS")
+# 
+# activations <- fread(file.path(path_origenes_consign, "01_SIP", "ext2", "V99",
+#                 "BAJAS-REACTIVACIONES", "SD2270_SIP_SPO_4493_react_out.enc.txt"),
+#                 header = TRUE) |>
+#   clean_names() |>
+#   rename(sip = nsip) |>
+#   mutate(fecha = dmy(fecha)) |>
+#   select(-v6) |>
+#   # filter with the sample IDs
+#   select(sip, fecha, accion)
+
+```
+
+```{r}
+# # update observation periods-----------------------------------------------
+# # there are some problematic sips that have more than one period
+# # but they don't appear in the activation file: append them apart.
+# problematic_sips <- sip_periods_0 |> 
+#   filter(periodo > 1) |> 
+#   distinct(sip) |> 
+#   anti_join(activations) |> 
+#   pull(sip)
+# 
+# # check problematic sips
+# sip_periods_0 |> filter(sip %in% problematic_sips)
+# activations |> filter(sip %in% problematic_sips)
+
+
+```
+
+
+```{r}
+# # update observation periods-----------------------------------------------
+# sip_periods_1 <- sip_periods_0 |> select(-fecha_defuncion) |>
+#   filter(sip %nin% problematic_sips) |> 
+#   left_join(activations,
+#             join_by(sip, fecha_inicio <= fecha,
+#                     fecha_fin >= fecha)) |> 
+#   arrange(sip, fecha) |>
+#   mutate(nueva_fecha_inicio = if_else(accion %in% c("Alta", "Reactivacion"),
+#                                       fecha, NA_Date_),
+#          nueva_fecha_fin = if_else(accion == "Baja", fecha, NA_Date_)) |>
+#   group_by(sip) |> 
+#    mutate(periodo = 1 + cumsum(as.numeric(lag(accion == "Baja", default = 0)))) |> 
+#   group_by(sip, periodo) |>
+#   summarise(fecha_inicio = max(fecha_inicio, nueva_fecha_inicio, na.rm = TRUE),
+#          fecha_fin = min(fecha_fin, nueva_fecha_fin, na.rm = TRUE)) |>
+#   ungroup() |>
+#   arrange(sip)
+# 
+# sip_periods_2 <- sip_periods_0 |> select(-fecha_defuncion) |>
+#   filter(sip %in% problematic_sips)
+# 
+# # all sip_periods
+# sip_periods <- union(sip_periods_1, sip_periods_2)
+
+```
+
+```{r}
+# # write table--------------------------------------------------------------
+# fwrite(sip_periods, append = FALSE,
+#        file = file.path("Target_tables", "AUXILIAR",
+#                         "sip_periods.csv"))
+
+```
+
+```{r}
+# load table-----------------------------------------------------------------
+sip_periods <- fread2(x = file.path("Target_tables", "AUXILIAR",
+                        "sip_periods.csv"))
+
+```
+
+```{r}
+# populate table-------------------------------------------------------------
+from_sip_to_observation_period <- sip_periods |>
+  select(sip,
+         fecha_inicio,
+         fecha_fin) |>
+  transmute(
+    observation_period_id = 1:n(),
+    person_source_value = sip,
+    observation_period_start_date = fecha_inicio,
+    observation_period_end_date = fecha_fin,
+    period_type_concept_id = 32828
+  ) |> 
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) |> 
+  relocate(observation_period_id, person_id)
+  
+
+# write table----------------------------------------------------------------
+fwrite(from_sip_to_observation_period, append = FALSE,
+       file = file.path("Target_tables",
+                        "observation_period_vid.csv"))
+
+```
+
+# death
+
+## From sip to death
+
+```{r}
+# populate table-------------------------------------------------------------
+from_sip_to_death <- from_sip_to_person |>
+  select(person_id,
+         fecha_defuncion) |>
+  # retrieve only persons with a death date
+  filter(!is.na(fecha_defuncion)) |> 
+  # check duplicates
+  tidylog::distinct() |> 
+  transmute(person_id,
+            death_date = fecha_defuncion,
+            death_datetime = fecha_defuncion,
+            death_type_concept_id = 32848,
+            cause_concept_id = NA_integer_,
+            cause_source_value = NA_character_,
+            cause_source_concept_id = NA_integer_
+            )
+
+# write table----------------------------------------------------------------
+fwrite(from_sip_to_death, append = FALSE,
+       file = file.path("Target_tables",
+                        "death_vid.csv"))
+
+```
+
+## From pmr to death
+
+::: {.callout-important}
+For now, it is not possible to perform the ETL process for the '**From pmr to death**' information. The sex of the newborn is currently unavailable, and in accordance with the OMOP conventions, these newborn records cannot be stored in the **person** table.
+:::
+
+```{r}
+# populate table-------------------------------------------------------------
+# from_pmr_to_death <- pmr
+
+```
+
+
+# Load source tables: part two
+
+```{r}
+# free up some memory--------------------------------------------------------
+rm(sip, sip_periods, sip_periods_0, sip_periods_1, sip_periods_2,
+   from_sip_to_care_site, from_sip_to_care_site_write,
+   from_sip_to_death, from_sip_to_observation_period, 
+   from_sip_to_person, from_sip_to_person_write)
+
+```
+
+```{r}
+# load tables----------------------------------------------------------------
+# second part
+pcv       <- fread(file.path(origin_tables, "pcv.csv"), encoding = "UTF-8")
+cex       <- fread(file.path(origin_tables, "cex.csv"), encoding = "UTF-8")
+aed       <- fread(file.path(origin_tables, "aed.csv"), encoding = "UTF-8")
+diagnoses <- fread(file.path(origin_tables, "diagnoses.csv"), 
+                    encoding = "UTF-8")
+mdr       <- fread2(file.path(origin_tables, "mdr.csv"), encoding = "UTF-8")
+eos       <- fread2(file.path(origin_tables, "eos.csv"),encoding = "UTF-8")
+
+```
+
+# visit_occurrence
+
+## From pcv to visit_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_pcv_to_visit_occurrence <- pcv |>
+  arrange(sip, fecha_consulta) |>
+  # filter to ICD codes
+  filter(tipo_codigo %in% c("ICD9CM", "ICD10ES")) |> 
+  # create unique visit id---------------------------------------------------
+  group_by(sip, fecha_consulta, serv_at_cod) |>
+  mutate(visit_occurrence_id = cur_group_id()) |>
+  ungroup() |> 
+  transmute(
+    visit_occurrence_id = visit_occurrence_id,
+    person_source_value = sip,
+    visit_concept_id = 9202,
+    visit_start_date = fecha_consulta,
+    visit_start_datetime = fecha_consulta,
+    visit_end_date = fecha_consulta,
+    visit_end_datetime = fecha_consulta,
+    visit_type_concept_id = 32834,
+    provider_id = NA_integer_,
+    care_site_id = NA_integer_,
+    visit_source_value = "PCV",
+    visit_source_concept_id = 0,
+    admitted_from_concept_id = 0,
+    admitted_from_source_value = NA_character_,
+    discharged_to_concept_id = 0,
+    discharged_to_source_value = NA_character_,
+    preceding_visit_occurrence_id = NA_integer_,
+    diag_cod = diag_cod,
+    tipo_codigo = tipo_codigo
+    ) |>
+  arrange(visit_occurrence_id) |> 
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) |> 
+  relocate(visit_occurrence_id, person_id)
+  
+# write table----------------------------------------------------------------
+fwrite(from_pcv_to_visit_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_pcv_to_visit_occurrence.csv"))
+
+last_pcv_visit_occurrence_id <- max(from_pcv_to_visit_occurrence$visit_occurrence_id)
+
+from_pcv_to_visit_occurrence_write <- from_pcv_to_visit_occurrence |> 
+  select(-diag_cod, -tipo_codigo) |> 
+  distinct()
+  
+# write table----------------------------------------------------------------
+fwrite(from_pcv_to_visit_occurrence_write, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "visit_occurrence_vid_0.csv"))
+
+```
+
+## From cex to visit_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_cex_to_visit_occurrence <- cex |>
+  # temporal fix -> move to cex_curation script
+  filter(sip %in% sips_consign) |> 
+  arrange(sip, fecha_consulta) |>
+  # filter to ICD codes
+  filter(
+    tipo_codigo1 %in% c("ICD9CM", "ICD9ES") |
+    tipo_codigo2 %in% c("ICD9CM", "ICD9ES") |
+    tipo_codigo3 %in% c("ICD9CM", "ICD9ES") |
+    tipo_codigo4 %in% c("ICD9CM", "ICD9ES")
+      ) |> 
+  # create unique visit id---------------------------------------------------
+  transmute(
+    visit_occurrence_id = 1:n() + last_pcv_visit_occurrence_id,
+    person_source_value = sip,
+    visit_concept_id = 9202,
+    visit_start_date = fecha_consulta,
+    visit_start_datetime = fecha_consulta,
+    visit_end_date = fecha_consulta,
+    visit_end_datetime = fecha_consulta,
+    visit_type_concept_id = 32834,
+    provider_id = NA_integer_,
+    care_site_id = NA_integer_,
+    visit_source_value = "CEX",
+    visit_source_concept_id = 0,
+    admitted_from_concept_id = 0,
+    admitted_from_source_value = NA_character_,
+    discharged_to_concept_id = 0,
+    discharged_to_source_value = NA_character_,
+    preceding_visit_occurrence_id = NA_integer_,
+    d1_cod, d2_cod, d3_cod, d4_cod,
+    tipo_codigo1, tipo_codigo2, tipo_codigo3, tipo_codigo4
+    ) |> 
+  arrange(visit_occurrence_id) |> 
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) |> 
+  relocate(visit_occurrence_id, person_id)
+
+# write table----------------------------------------------------------------
+fwrite(from_cex_to_visit_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_cex_to_visit_occurrence.csv"))
+
+last_cex_visit_occurrence_id <- max(from_cex_to_visit_occurrence$visit_occurrence_id)
+
+from_cex_to_visit_occurrence_write <- from_cex_to_visit_occurrence |> 
+  select(-d1_cod, -d2_cod, -d3_cod, -d4_cod,
+         -tipo_codigo1, -tipo_codigo2, -tipo_codigo3, -tipo_codigo4) |> 
+  distinct()
+  
+# write table----------------------------------------------------------------
+fwrite(from_cex_to_visit_occurrence_write, append = TRUE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "visit_occurrence_vid_0.csv"))
+
+```
+
+## From mbds to visit_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_mbds_to_visit_occurrence <- mbds |>
+  arrange(sip, fecha_ingreso) |>
+  # fill care_site_id
+  left_join(from_mbds_to_care_site |> 
+    select(care_site_id, hosp_cod = care_site_source_value)) |> 
+  # create unique visit id---------------------------------------------------
+  transmute(
+    visit_occurrence_id = 1:n() + last_cex_visit_occurrence_id,
+    person_source_value = sip,
+    visit_concept_id = 8717,
+    visit_start_date = fecha_ingreso,
+    visit_start_datetime = fecha_ingreso,
+    visit_end_date = fecha_alta,
+    visit_end_datetime = fecha_alta,
+    visit_type_concept_id = 32824,
+    provider_id = NA_integer_,
+    care_site_id = care_site_id,
+    visit_source_value = "MBDS",
+    visit_source_concept_id = 0,
+    admitted_from_concept_id = if_else(circ_ing_cod == 1,
+                                       9203, 0),
+    admitted_from_source_value = glue("{circ_ing_cod}: {circ_ing_desc}"),
+    discharged_to_concept_id = case_when(
+      circ_alta_cod == 7 ~ 38004279,
+      circ_alta_cod == 8 ~ 38004277,
+      circ_alta_cod == 9 ~ 8676,
+      circ_alta_cod == 14 ~ 38004284,
+      circ_alta_cod == 15 ~ 8717,
+      circ_alta_cod == 17 ~ 9203,
+      T ~ 0),
+    discharged_to_source_value = glue("{circ_alta_cod}: {circ_alta_desc}"),
+    preceding_visit_occurrence_id = NA_integer_,
+    across(d1:p30),
+    d_semana_gest,
+    semana_gest,
+    tipo_codigo
+    ) |> 
+  arrange(visit_occurrence_id) |> 
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) |> 
+  relocate(visit_occurrence_id, person_id)
+
+# write table----------------------------------------------------------------
+fwrite(from_mbds_to_visit_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_mbds_to_visit_occurrence.csv"))
+
+last_mbds_visit_occurrence_id <- max(from_mbds_to_visit_occurrence$visit_occurrence_id)
+
+from_mbds_to_visit_occurrence_write <- from_mbds_to_visit_occurrence |> 
+  select(-c(d1:p30, semana_gest, tipo_codigo, d_semana_gest)) |> 
+  distinct()
+
+# write table----------------------------------------------------------------
+fwrite(from_mbds_to_visit_occurrence_write, append = TRUE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "visit_occurrence_vid_0.csv"))
+
+```
+
+## From aed to visit_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_aed_to_visit_occurrence <- aed |>
+  arrange(sip, fecha_registro) |>
+  # filter to ICD codes
+  filter(
+    tipo_codigo1 %in% c("ICD9CM", "ICD9ES") |
+    tipo_codigo2 %in% c("ICD9CM", "ICD9ES")
+      ) |> 
+  # create unique visit id---------------------------------------------------
+  transmute(
+    visit_occurrence_id = 1:n() + last_mbds_visit_occurrence_id,
+    person_source_value = sip,
+    visit_concept_id = 9203,
+    visit_start_date = fecha_registro,
+    visit_start_datetime = fecha_registro,
+    visit_end_date = fecha_alta,
+    visit_end_datetime = fecha_alta,
+    visit_type_concept_id = 32826,
+    provider_id = NA_integer_,
+    care_site_id = NA_integer_,
+    visit_source_value = "AED",
+    visit_source_concept_id = 0,
+    admitted_from_concept_id = 0,
+    admitted_from_source_value = NA_character_,
+    discharged_to_concept_id = case_when(
+      circ_alta_cod == 7 ~ 38004279,
+      circ_alta_cod == 8 ~ 38004277,
+      circ_alta_cod == 9 ~ 8676,
+      circ_alta_cod == 14 ~ 38004284,
+      circ_alta_cod == 15 ~ 8717,
+      circ_alta_cod == 17 ~ 9203,
+      T ~ 0),
+    discharged_to_source_value = glue("{circ_alta_cod}: {circ_alta_desc}"),
+    preceding_visit_occurrence_id = NA_integer_,
+    diag_cod, diag2_cod,
+    tipo_codigo1, tipo_codigo2
+    ) |> 
+  arrange(visit_occurrence_id) |> 
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) |> 
+  relocate(visit_occurrence_id, person_id)
+
+# write table----------------------------------------------------------------
+fwrite(from_aed_to_visit_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_aed_to_visit_occurrence.csv"))
+
+last_aed_visit_occurrence_id <- max(from_aed_to_visit_occurrence$visit_occurrence_id)
+
+from_aed_to_visit_occurrence_write <- from_aed_to_visit_occurrence |> 
+  select(-diag_cod, -diag2_cod,
+         -tipo_codigo1, -tipo_codigo2) |> 
+  distinct()
+  
+# write table----------------------------------------------------------------
+fwrite(from_aed_to_visit_occurrence_write, append = TRUE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "visit_occurrence_vid_0.csv"))
+
+```
+
+## Fill preceding_visit_occurence_id
+
+```{r}
+# fill preceding_visit_occurrence_id-----------------------------------------
+visit_occurrence_vid_0 <- fread(file.path("Target_tables", 
+                          "AUXILIAR", "visit_occurrence_vid_0.csv"))
+
+visit_occurrence_vid <- visit_occurrence_vid_0 |> 
+  arrange(person_id, visit_start_date, visit_occurrence_id) |> 
+  group_by(person_id) |> 
+  mutate(preceding_visit_occurrence_id = lag(visit_occurrence_id)) |> 
+  ungroup() |> 
+  # trim discharged_to_source_value to fit omop specifications
+  mutate(discharged_to_source_value = str_sub(discharged_to_source_value, 
+                                              1, 50))
+
+fwrite(visit_occurrence_vid, append = FALSE,
+       file = file.path("Target_tables", "visit_occurrence_vid.csv"))
+
+```
+
+```{r}
+# free up some memory--------------------------------------------------------
+rm(visit_occurrence_vid, visit_occurrence_vid_0)
+
+```
+
+
+# condition_occurrence I (diagnoses)
+
+## vocabularies
+
+```{r}
+# load concepts vocabulary---------------------------------------------------
+concepts_vocabulary <- fread(file.path("vocabularies3", "CONCEPT.csv"))
+concepts_relationship <- fread(file.path("vocabularies3", "CONCEPT_RELATIONSHIP.csv"))
+concepts_ancestor <- fread(file.path("vocabularies3", "CONCEPT_ANCESTOR.csv"))
+
+```
+
+```{r}
+# obtain standard concepts---------------------------------------------------
+standards_concepts <- concepts_vocabulary |> 
+  filter(standard_concept == "S") 
+
+standard_concept_codes <- standards_concepts |> 
+  distinct(concept_id) |> pull()
+
+```
+
+
+```{r}
+# obtain icd9 concepts vocabulary--------------------------------------------
+icd9_concepts <- concepts_vocabulary |> 
+  filter(vocabulary_id == "ICD9CM")
+
+icd9_concept_codes <- icd9_concepts |> 
+  distinct(concept_id) |> pull()
+
+concepts_relationship_icd9 <- concepts_relationship |> 
+  filter(relationship_id == "Maps to") |> 
+  filter(concept_id_1 %in% icd9_concept_codes)  |> 
+  filter(concept_id_2 %in% standard_concept_codes) |>
+  left_join(icd9_concepts |> 
+              select(concept_code, concept_id_1 = concept_id)) |> 
+  select(condition_concept_id = concept_id_2, 
+         condition_source_concept_id = concept_id_1,
+         condition_source_value = concept_code) |> 
+  mutate(tipo_codigo = "ICD9CM")
+
+```
+
+```{r}
+# obtain icd10 concepts vocabulary--------------------------------------------
+icd10_concepts <- concepts_vocabulary |> 
+  filter(vocabulary_id == "ICD10CM")
+
+icd10_concept_codes <- icd10_concepts |> 
+  distinct(concept_id) |> pull()
+
+concepts_relationship_icd10 <- concepts_relationship |> 
+  filter(relationship_id == "Maps to") |> 
+  filter(concept_id_1 %in% icd10_concept_codes)  |> 
+  filter(concept_id_2 %in% standard_concept_codes) |>
+  left_join(icd10_concepts |> 
+              select(concept_code, concept_id_1 = concept_id)) |> 
+  select(condition_concept_id = concept_id_2, 
+         condition_source_concept_id = concept_id_1,
+         condition_source_value = concept_code) |> 
+  mutate(tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# some detected bugs---------------------------------------------------------
+
+# add relationships manually
+# from pcv
+icd9_concepts |> filter(concept_code == "E869.4")
+icd10_concepts |> filter(concept_code == "C78.5")
+icd10_concepts |> filter(concept_code == "C78.6")
+icd10_concepts |> filter(concept_code == "C78.7")
+icd10_concepts |> filter(concept_code == "C78.89")
+icd10_concepts |> filter(concept_code == "C79.00")
+icd10_concepts |> filter(concept_code == "C79.01")
+icd10_concepts |> filter(concept_code == "C79.82")
+icd10_concepts |> filter(concept_code == "O99.334")
+icd10_concepts |> filter(concept_code == "Z72.0")
+icd10_concepts |> filter(concept_code == "Z77.22")
+# from mbds
+icd10_concepts |> filter(concept_code == "C79.19")
+icd10_concepts |> filter(concept_code == "Z57.31")
+icd10_concepts |> filter(concept_code == "C79.02")
+
+
+```
+```{r}
+# E869.4
+concepts_relationship |> filter(concept_id_1 == 44834168)
+# is a = 44830680 (E869)
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Smokeless tobacco user"))
+
+manual_condition_relationship_0 <- tibble(
+  condition_concept_id = 903666,
+  condition_source_concept_id = 44834168,
+  condition_source_value = "E869.4",
+  tipo_codigo = "ICD9CM")
+
+```
+
+```{r}
+# C78.5
+concepts_relationship |> filter(concept_id_1 == 35206330)
+# is a = 1567619 (C78)
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Secondary malignant neoplasm of large intestine"))
+
+manual_condition_relationship_1 <- tibble(
+  condition_concept_id = 200348,
+  condition_source_concept_id = 35206330,
+  condition_source_value = "C78.5",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# C78.6
+concepts_relationship |> filter(concept_id_1 == 35206331)
+# is a = 1567619 (C78)
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Secondary malignant neoplasm of retroperitoneum and peritoneum"))
+
+manual_condition_relationship_2 <- tibble(
+  condition_concept_id = 196925,
+  condition_source_concept_id = 35206331,
+  condition_source_value = "C78.6",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# C78.7
+concepts_relationship |> filter(concept_id_1 == 35206332)
+# is a = 1567619 (C78)
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Secondary malignant neoplasm of liver and intrahepatic bile duct"))
+
+manual_condition_relationship_3 <- tibble(
+  condition_concept_id = 44806773,
+  condition_source_concept_id = 35206332,
+  condition_source_value = "C78.7",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# C78.89
+concepts_relationship |> filter(concept_id_1 == 45576340)
+# is a = 1567619 (C78), 1567622 (C78.8)
+concepts_vocabulary |> 
+  filter(concept_id == 1567619)
+
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Secondary malignant neoplasm of respiratory and digestive systems"))
+
+manual_condition_relationship_4 <- tibble(
+  condition_concept_id = 4147162,
+  condition_source_concept_id = 45576340,
+  condition_source_value = "C78.89",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# C79.00
+concepts_relationship |> filter(concept_id_1 == 45576341)
+# is a = 1567624 (C79.0), 1567623 (C79)
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Secondary malignant neoplasm of renal pelvis"))
+
+manual_condition_relationship_5 <- tibble(
+  condition_concept_id = 4315670,
+  condition_source_concept_id = 45576341,
+  condition_source_value = "C79.00",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# C79.01
+concepts_relationship |> filter(concept_id_1 == 45552283)
+# is a = 1567624 (C79.0), 1567623 (C79.01)
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Secondary malignant neoplasm of right kidney"))
+
+manual_condition_relationship_6 <- tibble(
+  condition_concept_id = 602668,
+  condition_source_concept_id = 45552283,
+  condition_source_value = "C79.01",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# C79.82
+concepts_relationship |> filter(concept_id_1 == 45600528)
+# is a = 1567631 (C79.8), 1567623 (C79)
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Secondary malignant neoplasm of genital organ"))
+
+manual_condition_relationship_7 <- tibble(
+  condition_concept_id = 608735,
+  condition_source_concept_id = 45600528,
+  condition_source_value = "C79.82",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# O99.334
+concepts_relationship |> filter(concept_id_1 == 45534324)
+# is a = 1571923 (O99), 1571931 (O99.3), 1571934 (O99.33)
+concepts_relationship |> filter(concept_id_1 == 1571931) # we select this
+
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Disease of nervous system complicating pregnancy, childbirth and puerperium"))
+
+manual_condition_relationship_8 <- tibble(
+  condition_concept_id = 4063155,
+  condition_source_concept_id = 45534324,
+  condition_source_value = "O99.334",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# Z72.0
+concepts_relationship |> filter(concept_id_1 == 35225271)
+# is a = 1576166 (Z72)
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Documentation that patient is a current tobacco user"))
+
+manual_condition_relationship_9 <- tibble(
+  condition_concept_id = 44786481,
+  condition_source_concept_id = 35225271,
+  condition_source_value = "Z72.0",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# Z77.22
+concepts_relationship |> filter(concept_id_1 == 45552107)
+# is a = 1576177 (Z77), 1576185 (Z77.2)
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Exposure to potentially hazardous substance"))
+
+manual_condition_relationship_10 <- tibble(
+  condition_concept_id = 37016166,
+  condition_source_concept_id = 45552107,
+  condition_source_value = "Z77.22",
+  tipo_codigo = "ICD10ES")
+
+```
+
+				
+
+```{r}
+# C79.19
+concepts_relationship |> filter(concept_id_1 == 45537842)
+
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Secondary malignant neoplasm of urinary system"))
+
+manual_condition_relationship_11 <- tibble(
+  condition_concept_id = 78987,
+  condition_source_concept_id = 45537842,
+  condition_source_value = "C79.19",
+  tipo_codigo = "ICD10ES")
+
+```
+
+
+
+```{r}
+# Z57.31
+concepts_relationship |> filter(concept_id_1 == 45537659)
+
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Setting of exposure to environmental or occupational hazard"))
+
+manual_condition_relationship_12 <- tibble(
+  condition_concept_id = 1002287,
+  condition_source_concept_id = 45537659,
+  condition_source_value = "Z57.31",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# C79.02
+concepts_relationship |> filter(concept_id_1 == 45600526)
+# is a = 1567624 (C79.0), 1567623 (C79.01)
+concepts_vocabulary |> 
+  filter(
+    standard_concept == "S",
+    str_detect(concept_name, "Secondary malignant neoplasm of left kidney"))
+
+manual_condition_relationship_13 <- tibble(
+  condition_concept_id = 605437,
+  condition_source_concept_id = 45600526,
+  condition_source_value = "C79.02",
+  tipo_codigo = "ICD10ES")
+
+```
+
+```{r}
+# une manual_condition_relationship------------------------------------------
+manual_condition_relationship <- manual_condition_relationship_0 |> 
+  union(manual_condition_relationship_1) |> 
+  union(manual_condition_relationship_2) |> 
+  union(manual_condition_relationship_3) |> 
+  union(manual_condition_relationship_4) |> 
+  union(manual_condition_relationship_5) |> 
+  union(manual_condition_relationship_6) |> 
+  union(manual_condition_relationship_7) |> 
+  union(manual_condition_relationship_8) |> 
+  union(manual_condition_relationship_9) |> 
+  union(manual_condition_relationship_10) |>  
+  union(manual_condition_relationship_11) |> 
+  union(manual_condition_relationship_12) |> 
+  union(manual_condition_relationship_13) 
+
+```
+
+
+```{r}
+# union icd9 and icd10 concepts_relationship---------------------------------
+concepts_relationship_icd9_icd10 <- concepts_relationship_icd9 |> 
+  union(concepts_relationship_icd10) |> 
+  union(manual_condition_relationship)
+
+```
+
+## From pcv to condition_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_pcv_to_condition_occurrence_0 <- from_pcv_to_visit_occurrence |>
+  # check duplicates
+  tidylog::distinct() |>
+  transmute(
+    person_id,
+    # condition_concept_id = "map",
+    condition_start_date = visit_start_date,
+    condition_start_datetime = visit_start_date,
+    condition_end_date = NA_Date_,
+    condition_end_datetime = NA_Date_,
+    condition_type_concept_id = 32834,
+    condition_status_concept_id = 32893,
+    stop_reason = NA_character_,
+    provider_id = NA_integer_,
+    visit_occurrence_id = visit_occurrence_id,
+    visit_detail_id = NA_integer_,
+    condition_source_value = diag_cod,
+    # condition_source_concept_id = "map",
+    condition_status_source_value = "PCV",
+    tipo_codigo
+    ) |> 
+  # temporal fix -> change in pcv curation script
+  mutate(tipo_codigo = if_else(
+    condition_source_value == "E869.4", "ICD9CM", tipo_codigo
+  ))
+
+from_pcv_to_condition_occurrence_0 |> filter(
+  condition_source_value == "E869.4"
+)
+
+```
+
+```{r}
+# pcv codes------------------------------------------------------------------
+from_pcv_to_condition_occurrence <- from_pcv_to_condition_occurrence_0 |>
+  left_join(concepts_relationship_icd9_icd10, 
+            by = c("condition_source_value", "tipo_codigo")) |> 
+  mutate(condition_occurrence_id = 1:n()) |> 
+  relocate(
+    condition_occurrence_id,
+    person_id,
+    condition_concept_id,
+    condition_start_date,
+    condition_start_datetime,
+    condition_end_date,
+    condition_end_datetime,
+    condition_type_concept_id,
+    condition_status_concept_id,
+    stop_reason,
+    provider_id,
+    visit_occurrence_id,
+    visit_detail_id,
+    condition_source_value,
+    condition_source_concept_id,
+    condition_status_source_value
+  )
+
+# check
+from_pcv_to_condition_occurrence |> 
+  filter(is.na(condition_source_concept_id)) |> 
+  distinct(condition_source_value)
+# All is mapped --> OK
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_pcv_to_condition_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_pcv_to_condition_occurrence.csv"))
+
+last_pcv_condition_occurrence_id <- 
+  max(from_pcv_to_condition_occurrence$condition_occurrence_id)
+
+from_pcv_to_condition_occurrence_write <- from_pcv_to_condition_occurrence |> 
+  select(-tipo_codigo)
+
+fwrite(from_pcv_to_condition_occurrence_write, append = FALSE,
+       file = file.path("Target_tables",
+                        "condition_occurrence_vid.csv"))
+
+```
+
+## From cex to condition_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_cex_to_condition_occurrence_0 <- from_cex_to_visit_occurrence |>
+  # check duplicates
+  tidylog::distinct() |>
+  # pivot_longer
+  mutate(
+    d1_cod_tipo = str_c(d1_cod, tipo_codigo1, sep = "|"),
+    d2_cod_tipo = str_c(d2_cod, tipo_codigo2, sep = "|"),
+    d3_cod_tipo = str_c(d3_cod, tipo_codigo3, sep = "|"),
+    d4_cod_tipo = str_c(d4_cod, tipo_codigo4, sep = "|")) |>
+    select(-c(d1_cod, d2_cod, d3_cod, d4_cod,
+              tipo_codigo1, tipo_codigo2, tipo_codigo3, tipo_codigo4)) |> 
+  pivot_longer(d1_cod_tipo:d4_cod_tipo,
+               values_to = c("diag_cod_tipo")) |> 
+  select(-name) |> 
+  separate(diag_cod_tipo, into = c("diag_cod", "tipo_codigo"), sep ="\\|") |> 
+  filter(tipo_codigo %in% c("ICD9CM", "ICD10ES")) |> 
+  transmute(
+    person_id = person_id,
+    # condition_concept_id = "map",
+    condition_start_date = visit_start_date,
+    condition_start_datetime = visit_start_date,
+    condition_end_date = NA_Date_,
+    condition_end_datetime = NA_Date_,
+    condition_type_concept_id = 32834,
+    condition_status_concept_id = 32893,
+    stop_reason = NA_character_,
+    provider_id = NA_integer_,
+    visit_occurrence_id = visit_occurrence_id,
+    visit_detail_id = NA_integer_,
+    condition_source_value = diag_cod,
+    # condition_source_concept_id = "map",
+    condition_status_source_value = "CEX",
+    tipo_codigo
+    )
+
+```
+
+```{r}
+# cex codes------------------------------------------------------------------
+from_cex_to_condition_occurrence <- from_cex_to_condition_occurrence_0 |>
+  left_join(concepts_relationship_icd9_icd10, 
+            by = c("condition_source_value", "tipo_codigo")) |> 
+  mutate(condition_occurrence_id = 1:n() + last_pcv_condition_occurrence_id) |> 
+  relocate(
+    condition_occurrence_id,
+    person_id,
+    condition_concept_id,
+    condition_start_date,
+    condition_start_datetime,
+    condition_end_date,
+    condition_end_datetime,
+    condition_type_concept_id,
+    condition_status_concept_id,
+    stop_reason,
+    provider_id,
+    visit_occurrence_id,
+    visit_detail_id,
+    condition_source_value,
+    condition_source_concept_id,
+    condition_status_source_value
+  )
+
+# check
+from_cex_to_condition_occurrence |> 
+  filter(is.na(condition_source_concept_id)) 
+# All is mapped --> OK
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_cex_to_condition_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_cex_to_condition_occurrence.csv"))
+
+last_cex_condition_occurrence_id <- 
+  max(from_cex_to_condition_occurrence$condition_occurrence_id)
+
+from_cex_to_condition_occurrence_write <- from_cex_to_condition_occurrence |> 
+  select(-tipo_codigo)
+
+fwrite(from_cex_to_condition_occurrence_write, append = TRUE,
+       file = file.path("Target_tables",
+                        "condition_occurrence_vid.csv"))
+
+```
+
+## From mbds to condition_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_mbds_to_condition_occurrence_0 <- from_mbds_to_visit_occurrence |>
+  # check duplicates
+  tidylog::distinct() |>
+  # pivot_longer
+  pivot_longer(d1:d30,
+               values_to = c("diag_cod")) |> 
+  filter(tipo_codigo %in% c("ICD9CM", "ICD10ES")) |> 
+  # remove empty diagnoses
+  tidylog::filter(!is.na(diag_cod), diag_cod %nin% c("", "-")) |>   
+  transmute(
+    person_id,
+    # condition_concept_id = "map",
+    condition_start_date = visit_start_date,
+    condition_start_datetime = visit_start_date,
+    condition_end_date = NA_Date_,
+    condition_end_datetime = NA_Date_,
+    condition_type_concept_id = 32824,
+    condition_status_concept_id = if_else(name == "d1", 32903, 32909),
+    stop_reason = NA_character_,
+    provider_id = NA_integer_,
+    visit_occurrence_id = visit_occurrence_id,
+    visit_detail_id = NA_integer_,
+    condition_source_value = diag_cod,
+    # condition_source_concept_id = "map",
+    condition_status_source_value = "MBDS",
+    tipo_codigo
+    )
+
+```
+
+```{r}
+# mbds codes------------------------------------------------------------------
+from_mbds_to_condition_occurrence <- from_mbds_to_condition_occurrence_0 |>
+  left_join(concepts_relationship_icd9_icd10, 
+            by = c("condition_source_value", "tipo_codigo")) |> 
+  mutate(condition_occurrence_id = 1:n() + last_cex_condition_occurrence_id) |> 
+  relocate(
+    condition_occurrence_id,
+    person_id,
+    condition_concept_id,
+    condition_start_date,
+    condition_start_datetime,
+    condition_end_date,
+    condition_end_datetime,
+    condition_type_concept_id,
+    condition_status_concept_id,
+    stop_reason,
+    provider_id,
+    visit_occurrence_id,
+    visit_detail_id,
+    condition_source_value,
+    condition_source_concept_id,
+    condition_status_source_value
+  )
+
+# check
+from_mbds_to_condition_occurrence |> 
+  filter(is.na(condition_source_concept_id)) |> 
+  distinct(condition_source_value) |> 
+  arrange(condition_source_value)
+# Some weird codes -> map to 0
+
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_mbds_to_condition_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_mbds_to_condition_occurrence.csv"))
+
+last_mbds_condition_occurrence_id <- 
+  max(from_mbds_to_condition_occurrence$condition_occurrence_id)
+
+from_mbds_to_condition_occurrence_write <- from_mbds_to_condition_occurrence |> 
+  select(-tipo_codigo) |> 
+  mutate(condition_concept_id = if_else(is.na(condition_concept_id), 
+                                        0, condition_concept_id))
+
+fwrite(from_mbds_to_condition_occurrence_write, append = TRUE,
+       file = file.path("Target_tables",
+                        "condition_occurrence_vid.csv"))
+
+```
+
+## From aed to condition_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_aed_to_condition_occurrence_0 <- from_aed_to_visit_occurrence |>
+  # check duplicates
+  tidylog::distinct() |>
+  # pivot_longer
+  mutate(
+    d1_cod_tipo = str_c(diag_cod, tipo_codigo1, sep = "|"),
+    d2_cod_tipo = str_c(diag2_cod, tipo_codigo2, sep = "|")) |>
+    select(-c(diag_cod, diag2_cod, 
+              tipo_codigo1, tipo_codigo2)) |> 
+  pivot_longer(d1_cod_tipo:d2_cod_tipo,
+               values_to = c("diag_cod_tipo")) |> 
+  select(-name) |> 
+  separate(diag_cod_tipo, into = c("diag_cod", "tipo_codigo"), sep ="\\|") |> 
+  filter(tipo_codigo %in% c("ICD9CM", "ICD10ES")) |> 
+  transmute(
+    person_id,
+    # condition_concept_id = "map",
+    condition_start_date = visit_start_date,
+    condition_start_datetime = visit_start_date,
+    condition_end_date = NA_Date_,
+    condition_end_datetime = NA_Date_,
+    condition_type_concept_id = 32826,
+    condition_status_concept_id = 32893,
+    stop_reason = NA_character_,
+    provider_id = NA_integer_,
+    visit_occurrence_id = visit_occurrence_id,
+    visit_detail_id = NA_integer_,
+    condition_source_value = diag_cod,
+    # condition_source_concept_id = "map",
+    condition_status_source_value = "AED",
+    tipo_codigo
+    )
+
+```
+
+```{r}
+# aed codes------------------------------------------------------------------
+from_aed_to_condition_occurrence <- from_aed_to_condition_occurrence_0 |>
+  left_join(concepts_relationship_icd9_icd10, 
+            by = c("condition_source_value", "tipo_codigo")) |> 
+  mutate(condition_occurrence_id = 1:n() + last_mbds_condition_occurrence_id) |> 
+  relocate(
+    condition_occurrence_id,
+    person_id,
+    condition_concept_id,
+    condition_start_date,
+    condition_start_datetime,
+    condition_end_date,
+    condition_end_datetime,
+    condition_type_concept_id,
+    condition_status_concept_id,
+    stop_reason,
+    provider_id,
+    visit_occurrence_id,
+    visit_detail_id,
+    condition_source_value,
+    condition_source_concept_id,
+    condition_status_source_value
+  )
+
+# check
+from_aed_to_condition_occurrence |> 
+  filter(is.na(condition_source_concept_id)) 
+# All is mapped --> OK
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_aed_to_condition_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_aed_to_condition_occurrence.csv"))
+
+last_aed_condition_occurrence_id <- 
+  max(from_aed_to_condition_occurrence$condition_occurrence_id)
+
+from_aed_to_condition_occurrence_write <- from_aed_to_condition_occurrence |> 
+  select(-tipo_codigo)
+
+fwrite(from_aed_to_condition_occurrence_write, append = TRUE,
+       file = file.path("Target_tables",
+                        "condition_occurrence_vid.csv"))
+
+```
+
+## From diagnoses to condition_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_diagnoses_to_condition_occurrence_0 <- diagnoses |>
+  # temporal fix -> move to curation script
+  filter(sip %in% sips_consign) |> 
+  # check duplicates
+  tidylog::distinct() |>
+  filter(tipo_codigo %in% c("ICD9CM", "ICD10ES")) |> 
+  transmute(
+    person_source_value = sip,
+    # condition_concept_id = "map",
+    condition_start_date = fecha_act,
+    condition_start_datetime = fecha_act,
+    condition_end_date = fecha_desact,
+    condition_end_datetime = fecha_desact,
+    condition_type_concept_id = 32817,
+    condition_status_concept_id = 32893,
+    stop_reason = NA_character_,
+    provider_id = NA_integer_,
+    visit_occurrence_id = NA_integer_,
+    visit_detail_id = NA_integer_,
+    condition_source_value = diag_cod,
+    # condition_source_concept_id = "map",
+    condition_status_source_value = "DIAGNOSES",
+    tipo_codigo
+    ) |> 
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) |> 
+  relocate(visit_occurrence_id, person_id)
+
+```
+
+```{r}
+# diagnoses codes------------------------------------------------------------
+from_diagnoses_to_condition_occurrence <- from_diagnoses_to_condition_occurrence_0 |>
+  left_join(concepts_relationship_icd9_icd10, 
+            by = c("condition_source_value", "tipo_codigo")) |> 
+  mutate(condition_occurrence_id = 1:n() + last_aed_condition_occurrence_id) |> 
+  relocate(
+    condition_occurrence_id,
+    person_id,
+    condition_concept_id,
+    condition_start_date,
+    condition_start_datetime,
+    condition_end_date,
+    condition_end_datetime,
+    condition_type_concept_id,
+    condition_status_concept_id,
+    stop_reason,
+    provider_id,
+    visit_occurrence_id,
+    visit_detail_id,
+    condition_source_value,
+    condition_source_concept_id,
+    condition_status_source_value
+  )
+
+# check
+from_diagnoses_to_condition_occurrence |> 
+  filter(is.na(condition_source_concept_id)) 
+# All is mapped --> OK
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_diagnoses_to_condition_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_diagnoses_to_condition_occurrence.csv"))
+
+last_diagnoses_condition_occurrence_id <- 
+  max(from_diagnoses_to_condition_occurrence$condition_occurrence_id)
+
+from_diagnoses_to_condition_occurrence_write <- from_diagnoses_to_condition_occurrence |> 
+  select(-tipo_codigo)
+
+fwrite(from_diagnoses_to_condition_occurrence_write, append = TRUE,
+       file = file.path("Target_tables",
+                        "condition_occurrence_vid.csv"))
+
+```
+
+# condition_occurrence II (pregnancy eras)
+
+## vocabularies
+
+```{r}
+# look concepts--------------------------------------------------------------
+concepts_vocabulary |> filter(domain_id == "Type Concept",
+                              standard_concept == "S") 
+concepts_vocabulary |> filter(domain_id == "Condition Status") 
+  
+concepts_vocabulary |> filter(standard_concept == "S") |> 
+  filter(str_detect(concept_name, "Pregnancy")) 
+  
+```
+
+## From mdr to condition_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_mdr_to_condition_occurrence <- mdr |>
+  # temporal fix -> move to curation script
+  filter(sip_madre %in% sips_consign) |>
+  transmute(
+    condition_occurrence_id = 1:n() + last_diagnoses_condition_occurrence_id,
+    person_source_value = sip_madre,
+    # 4142469: Pregnancy time period; 4128331: Pregnancy;
+    # 4336958: Term pregnancy; 
+    condition_concept_id = 4336958,
+    # when semana_gest is missing a value of 38 weeks is imputed
+    condition_start_date = if_else(!is.na(semana_gest),
+      fecha_nac_hijo %m-% weeks(semana_gest),
+      fecha_nac_hijo %m-% weeks(38)),    
+    condition_start_datetime = condition_start_date,
+    condition_end_date = fecha_nac_hijo,
+    condition_end_datetime = condition_end_date,
+    # 32879: Registry
+    condition_type_concept_id = 32879,
+    # 32906: Resolved condition	
+    condition_status_concept_id = 32906,
+    stop_reason = "livebirth",
+    provider_id = NA_integer_,
+    visit_occurrence_id = NA_integer_,
+    visit_detail_id = NA_integer_,
+    condition_source_value = NA_character_,
+    condition_source_concept_id = NA_integer_,
+    condition_status_source_value = "MDR"
+    ) |> 
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) |> 
+relocate(
+    condition_occurrence_id,
+    person_id,
+    condition_concept_id,
+    condition_start_date,
+    condition_start_datetime,
+    condition_end_date,
+    condition_end_datetime,
+    condition_type_concept_id,
+    condition_status_concept_id,
+    stop_reason,
+    provider_id,
+    visit_occurrence_id,
+    visit_detail_id,
+    condition_source_value,
+    condition_source_concept_id,
+    condition_status_source_value) |> 
+  # check duplicates
+  tidylog::distinct()
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_mdr_to_condition_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_mdr_to_condition_occurrence.csv"))
+
+last_mdr_condition_occurrence_id <- 
+  max(from_mdr_to_condition_occurrence$condition_occurrence_id)
+
+fwrite(from_mdr_to_condition_occurrence, append = TRUE,
+       file = file.path("Target_tables",
+                        "condition_occurrence_vid.csv"))
+
+```
+
+## From eos to condition_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_eos_to_condition_occurrence <- eos |>
+  # temporal fix -> move to curation script
+  filter(sip %in% sips_consign) |>
+  # fix resultado_rn2, resultado_rn3
+  mutate(resultado_rn2 = if_else(resultado_rn2 == "", 
+                                 NA_character_, resultado_rn2),
+         resultado_rn3 = if_else(resultado_rn3 == "", 
+                                 NA_character_, resultado_rn3)) |> 
+  # check duplicates
+  tidylog::distinct() |>
+  transmute(
+    condition_occurrence_id = 1:n() + last_mdr_condition_occurrence_id,
+    person_source_value = sip,
+    # 4142469: Pregnancy time period; 4128331: Pregnancy;
+    # 4336958: Term pregnancy; 
+    condition_concept_id = 4142469,
+    # when semana_gest is missing the observation is removed
+    condition_start_date = fecha_fin_emb %m-% weeks(semana_gest),
+    condition_start_datetime = condition_start_date,
+    condition_end_date = fecha_fin_emb,
+    condition_end_datetime = condition_end_date,
+    # 32879: Registry; 32817: EHR;
+    condition_type_concept_id = 32817,
+    # 32906: Resolved condition	
+    condition_status_concept_id = 32906,
+    stop_reason = "End of pregnancy",
+    provider_id = NA_integer_,
+    visit_occurrence_id = NA_integer_,
+    visit_detail_id = NA_integer_,
+    condition_source_value = glue("{multiple_pregnancy}: {resultado_rn1}/{resultado_rn2}/{resultado_rn3}"),
+    condition_source_concept_id = NA_integer_,
+    condition_status_source_value = "EOS"
+    )  |> 
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) |> 
+  relocate(condition_occurrence_id, person_id) |> 
+  tidylog::filter(!is.na(condition_start_date))
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_eos_to_condition_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_eos_to_condition_occurrence.csv"))
+
+last_eos_condition_occurrence_id <- 
+  max(from_eos_to_condition_occurrence$condition_occurrence_id)
+
+fwrite(from_eos_to_condition_occurrence, append = TRUE,
+       file = file.path("Target_tables",
+                        "condition_occurrence_vid.csv"))
+
+```
+
+# procedure_occurrence 
+
+## vocabularies
+
+```{r}
+# obtain icd9 concepts vocabulary--------------------------------------------
+icd9_procedures <- concepts_vocabulary |> 
+  filter(vocabulary_id == "ICD9Proc")
+
+icd9_procedure_codes <- icd9_procedures |> 
+  distinct(concept_id) |> pull()
+
+concepts_relationship_icd9_proc <- concepts_relationship |> 
+  filter(relationship_id == "Maps to") |> 
+  filter(concept_id_1 %in% icd9_procedure_codes)  |> 
+  filter(concept_id_2 %in% standard_concept_codes) |>
+  left_join(icd9_procedures |> 
+              select(concept_code, concept_id_1 = concept_id)) |> 
+  select(procedure_concept_id = concept_id_2, 
+         procedure_source_concept_id = concept_id_1,
+         procedure_source_value = concept_code) |> 
+  mutate(tipo_codigo = "ICD9CM")
+
+```
+
+
+```{r}
+# obtain icd10 concepts vocabulary--------------------------------------------
+icd10_procedures <- concepts_vocabulary |> 
+  filter(vocabulary_id == "ICD10PCS")
+
+concepts_vocabulary |> distinct(vocabulary_id)
+
+icd10_procedure_codes <- icd10_procedures |> 
+  distinct(concept_id) |> pull()
+
+concepts_relationship_icd10_proc <- concepts_relationship |> 
+  filter(relationship_id == "Maps to") |> 
+  filter(concept_id_1 %in% icd10_procedure_codes)  |> 
+  filter(concept_id_2 %in% standard_concept_codes) |>
+  left_join(icd10_procedures |> 
+              select(concept_code, concept_id_1 = concept_id)) |> 
+  select(procedure_concept_id = concept_id_2, 
+         procedure_source_concept_id = concept_id_1,
+         procedure_source_value = concept_code) |> 
+  mutate(tipo_codigo = "ICD10ES")
+
+```
+
+
+```{r}
+# union icd9 and icd10 concepts_relationship---------------------------------
+concepts_relationship_icd9_icd10_proc <- concepts_relationship_icd9_proc |> 
+  union(concepts_relationship_icd10_proc)
+
+```
+
+## From mbds to procedure_occurrence
+
+```{r}
+# populate table-------------------------------------------------------------
+from_mbds_to_procedure_occurrence_0 <- from_mbds_to_visit_occurrence |>
+  # check duplicates
+  tidylog::distinct() |>
+  # pivot_longer
+  pivot_longer(p1:p30,
+               values_to = c("proc_cod")) |> 
+  filter(tipo_codigo %in% c("ICD9CM", "ICD10ES")) |> 
+  # remove empty procedures
+  tidylog::filter(!is.na(proc_cod), proc_cod %nin% c("", "-")) |> 
+  transmute(
+    person_id,
+    # procedure_concept_id = "map",
+    procedure_date = visit_start_date,
+    procedure_datetime = visit_start_date,
+    procedure_end_date = visit_end_date,
+    procedure_end_datetime = visit_end_date,
+    procedure_type_concept_id = 32824,
+    modifier_concept_id = 0,
+    quantity = 1,
+    provider_id = NA_integer_,
+    visit_occurrence_id = visit_occurrence_id,
+    visit_detail_id = NA_integer_,
+    procedure_source_value = proc_cod,
+    # procedure_source_concept_id = "map",
+    modifier_source_value = "MBDS",
+    tipo_codigo
+    )
+
+```
+
+```{r}
+# mbds codes------------------------------------------------------------------
+from_mbds_to_procedure_occurrence <- from_mbds_to_procedure_occurrence_0 |>
+  left_join(concepts_relationship_icd9_icd10_proc, 
+            by = c("procedure_source_value", "tipo_codigo")) |> 
+  mutate(procedure_occurrence_id = 1:n()) |> 
+  relocate(
+    procedure_occurrence_id,
+    person_id,
+    procedure_concept_id,
+    procedure_date,
+    procedure_datetime,
+    procedure_end_date,
+    procedure_end_datetime,
+    procedure_type_concept_id,
+    modifier_concept_id,
+    quantity,
+    provider_id,
+    visit_occurrence_id,
+    visit_detail_id,
+    procedure_source_value,
+    procedure_source_concept_id,
+    modifier_source_value
+  )
+
+# check
+from_mbds_to_procedure_occurrence |> 
+  filter(is.na(procedure_source_concept_id)) 
+# All is mapped --> OK
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_mbds_to_procedure_occurrence, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_mbds_to_procedure_occurrence.csv"))
+
+last_mbds_procedure_occurrence_id <- 
+  max(from_mbds_to_procedure_occurrence$procedure_occurrence_id)
+
+from_mbds_to_procedure_occurrence_write <- from_mbds_to_procedure_occurrence |> 
+  select(-tipo_codigo)
+
+fwrite(from_mbds_to_procedure_occurrence_write, append = FALSE,
+       file = file.path("Target_tables",
+                        "procedure_occurrence_vid.csv"))
+
+```
+
+# Load source tables: part three
+
+```{r}
+# free up some memory--------------------------------------------------------
+rm(pcv, from_pcv_to_condition_occurrence, from_pcv_to_condition_occurrence_0,
+   from_pcv_to_condition_occurrence_write, from_pcv_to_visit_occurrence,
+   from_pcv_to_visit_occurrence_write)
+
+rm(diagnoses, from_diagnoses_to_condition_occurrence, 
+   from_diagnoses_to_condition_occurrence_0,
+   from_diagnoses_to_condition_occurrence_write)
+
+rm(from_mbds_to_condition_occurrence, 
+   from_mbds_to_condition_occurrence_0,
+   from_mbds_to_condition_occurrence_write)
+
+rm(cex, from_cex_to_condition_occurrence,
+   from_cex_to_condition_occurrence_0,
+   from_cex_to_condition_occurrence_write
+   )
+
+rm(aed, from_aed_to_condition_occurrence,
+   from_aed_to_condition_occurrence_0,
+   from_aed_to_condition_occurrence_write
+   )
+
+rm(from_mbds_to_procedure_occurrence, 
+   from_mbds_to_procedure_occurrence_0,
+   from_mbds_to_procedure_occurrence_write,
+   from_mbds_to_visit_occurrence,
+   from_mbds_to_visit_occurrence_write)
+
+gc()
+
+```
+
+
+```{r}
+# load tables----------------------------------------------------------------
+# third part
+gaia      <- fread(file.path(origin_tables, "gaia.csv"), encoding = "Latin-1")
+siv       <- fread(file.path(origin_tables, "siv.csv"), encoding = "UTF-8")
+redmiva   <- fread(file.path(origin_tables, "redmiva.csv"), encoding = "UTF-8")
+
+```
+
+# drug_exposure
+
+## vocabularies
+
+```{r}
+# load gaia_clinical_drugs---------------------------------------------------
+gaia_clinical_drugs5 <- fread(file.path("..", "Consign", "Resultados",
+                               "gaia_masters", "gaia_clinical_drugs5.csv"),
+                               encoding = "Latin-1")
+
+```
+
+```{r}
+# check gaia_master----------------------------------------------------------
+gaia_clinical_drugs5 |> distinct(atc_cod, atc_desc)
+
+gaia_clinical_drugs5 |> distinct(via_cod, via_desc) |> 
+  arrange(via_desc)
+
+```
+
+The route mapping is made one by one. Checking the *via_desc* and selecting the approppiate standard route *concept_id*. 
+
+```{r}
+# route_mapping--------------------------------------------------------------
+gaia_clinical_drugs5 |> distinct(via_cod, via_desc) |> 
+  arrange(via_desc) 
+
+standard_route_concepts <- concepts_vocabulary |> 
+  filter(domain_id == "Route") |> 
+  filter(standard_concept == "S") |> 
+  arrange(concept_name)
+
+standard_route_concepts |> filter(str_detect(concept_name, "arti"))
+
+gaia_clinical_drugs5 |> distinct(via_cod, via_desc) |> 
+  arrange(via_desc) |> pull(via_desc)
+
+concepts_relationship_route_0 <- gaia_clinical_drugs5 |> distinct(via_cod, via_desc) |> 
+  arrange(via_desc)  |> 
+  mutate(concept_name = c(
+    # "BUCAL"
+    "Buccal route",
+    # "BUCOFARINGEA"
+    "Oropharyngeal route",
+    # "INHALATORIA/PULMONAR" 
+    "Inhalation",
+    # "INTRADERMICA"        
+    "Intradermal route",
+    # "INTRAMUSCULAR"    
+    "Intramuscular route",
+    # "INTRARTICULAR"       
+    "Intra-articular route",
+    # "INTRAVENOSA"     
+    "Intravenous route",
+    # "INTRAVESICAL"  
+    "Intravesical route",
+    # "INTRAVITREA"
+    "Intravitreal route",
+    # "NASAL"  
+    "Nasal route",
+    # "OFTALMICA"  
+    "Ocular route",
+    # "ORAL"               
+    "Oral route",
+    # "OTICA"                
+    "Otic route",
+    # "PARENTERAL"           
+    "Subcutaneous route",
+    # "PERCUTANEA/PARCHES"  
+    "Percutaneous route",
+    # "PULMONAR"             
+    "Respiratory tract route",
+    # "RECTAL"      
+    "Rectal route",
+    # "RECTAL"      
+    "Rectal route",
+    # "SUBCUTANEA"          
+    "Subcutaneous route",
+    # "SUBCUTANEA"          
+    "Subcutaneous route",
+    # "SUBLINGUAL"           
+    "Sublingual route",
+    # "TOPICA DERMICA"
+    "Topical route",
+    # "TRANSDERMAL"
+    "Transdermal route"
+  )) 
+
+concepts_relationship_route <- concepts_relationship_route_0 |> 
+  left_join(standard_route_concepts |> 
+              select(route_concept_id = concept_id, 
+                     concept_name)) |> 
+  distinct(route_concept_id,
+           route_source_value = via_desc)
+
+```
+
+
+
+```{r}
+# gaia drug_concept_id (atc level) mapping-----------------------------------
+atc_concepts <- concepts_vocabulary |> 
+  filter(concept_code %in% (gaia_clinical_drugs5 |> 
+                              distinct(atc_cod) |>  pull()))
+
+atc_concept_codes <- atc_concepts |> 
+  distinct(concept_id) |> pull()
+
+missing_presentations <- gaia_clinical_drugs5 |> 
+ anti_join(atc_concepts, by = c(atc_cod = "concept_code")) 
+
+missing_atc_cod_desc <- missing_presentations |> 
+  distinct(atc_cod, atc_desc) |> 
+  arrange(atc_cod)
+
+missing_atc_source_codes <- missing_atc_cod_desc |> pull(atc_cod)
+
+```
+
+
+```{r}
+# search manually atc unmaped codes------------------------------------------
+unmpaded_atc_codes_to_standard <- standards_concepts |> 
+  # "A10BB91" GLISENTIDA
+  filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "GLISENTIDE")) |> union(
+# "C01BA92" HIDROQUINIDINA
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "hydroquinidine"))) |> union(
+# "C01BB91" FENITOINA
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "^phenytoin"))) |> union(
+# "C03XW91" UREA
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "^urea$"))) |> union(
+# "C04AX57" VINCAMINA, COMBINACIONES CON	
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "vincamine"))) |> union(
+# "J05AC91" AMANTADINA
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "amantadine"))) |> union(
+# "L03AX91" FOSFOGLICOPEPTICAL
+standards_concepts |> filter(
+  str_detect(concept_name, "^Glycopeptide$"))) |> union(
+# "M01AX93" ISONIXINA
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "^isoniazid"))) |> union(
+# "M01BA92" INDOMETACINA Y PREDNISONA, COMBINACIONES CON	
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "^indomethacin"))) |> union(
+# "N02BG91" CLONIXINATO DE LISINA	
+standards_concepts |> filter(
+  str_detect(concept_name, "Arginine \\+ Lysine"))) |> union(
+# "N05BA51" DIAZEPAM, COMBINACIONES CON	
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "^diazepam"))) |> union(
+# "N05BA91" BENTAZEPAM
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "^BENTAZEPAM"))) |> union(
+# "N05CM93" GLUTAMATO MAGNESICO BROMHIDRATO	
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "^magnesium glutamate"))) |> union(
+# "N06BX54" DEANOL, COMBINACIONES CON	
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "^deanol"))) |> union(
+# "N06BX95" GABOB EN COMBINACION	
+standards_concepts |> filter(concept_class_id == "Substance",
+  str_detect(concept_name, "^Gamma-aminobutyric acid"))) |> union(
+# "R05CZ95" SULFONAMIDAS ASOCIADAS A MUCOLITICO Y/O EXPECTORANTE	
+standards_concepts |> filter(concept_class_id == "Substance",
+  str_detect(concept_name, "^Sulfonamide$"))) |> union(
+# "R05DA91" DIHIDROCODEINA
+standards_concepts |> filter(concept_class_id == "Ingredient",
+  str_detect(concept_name, "^dihydrocodeine")))
+
+```
+
+
+```{r}
+# mapped but with no relationship--------------------------------------------
+gaia_clinical_drugs5 |> filter(atc_cod %in% c(
+  "R05CB10", "R05DA20", "R05CA10", "R05FA02", "R01AX30"))
+# For now 0. Is better use pres_farma_desc instead of atc_cod
+
+```
+
+```{r}
+# manual atc drug_concept id relationship-------------------------------------
+manual_atc_drug_relationship <- tibble(
+  drug_concept_id = unmpaded_atc_codes_to_standard$concept_id,
+  drug_source_concept_id = 0,
+  drug_source_value = missing_atc_source_codes
+)
+
+```
+
+
+```{r}
+# obtain atc concepts relationships------------------------------------------
+concepts_relationship_atc <- concepts_relationship |> 
+  filter(relationship_id == "Maps to") |> 
+  filter(concept_id_1 %in% atc_concept_codes)  |> 
+  filter(concept_id_2 %in% standard_concept_codes) |> 
+  left_join(atc_concepts |> 
+              select(concept_code, concept_id_1 = concept_id)) |> 
+  select(drug_concept_id = concept_id_2, 
+         drug_source_concept_id = concept_id_1,
+         drug_source_value = concept_code) |>
+  # add manual relationships
+  union(manual_atc_drug_relationship) |> 
+  tidylog::distinct()
+
+```
+
+
+```{r}
+# check one to many mappings-------------------------------------------------
+list_of_concepts <- concepts_relationship |> 
+  filter(relationship_id == "Maps to") |> 
+  filter(concept_id_1 == 21601312) |> 
+  pull(concept_id_2)
+
+concepts_vocabulary |> filter(concept_id %in% list_of_concepts)
+
+```
+
+```{r}
+# load siv_clinical_drugs----------------------------------------------------
+siv_clinical_drugs2 <- fread(file.path("..", "Consign", "Resultados",
+                               "gaia_masters", "siv_clinical_drugs2.csv"))
+
+```
+
+
+```{r}
+# siv drug_concept_id mapping------------------------------------------------
+concepts_relationship_siv_drug <- siv_clinical_drugs2 |> 
+  left_join(standards_concepts |> select(cvx_concept_name = concept_name,
+                                          concept_id)) |>
+  mutate(drug_source_concept_id = 0) |> 
+  select(drug_concept_id = concept_id,
+         drug_source_concept_id,
+         drug_source_value = tipo_vacuna) |> 
+  distinct()
+  
+```
+
+## From gaia to drug_exposure
+
+```{r}
+# populate table-------------------------------------------------------------
+from_gaia_to_drug_exposure_0 <- gaia |>
+  # temporal fix -> move to curation script
+  filter(sip %in% sips_consign) |>
+  # paste gaia_clinical_drugs5 vars
+  select(-c(pres_farma_desc, 
+            atc_cod, atc_desc,
+            prin_act_cod, prin_act_desc,
+            via_cod, via_desc)) |> 
+  left_join(gaia_clinical_drugs5, by = "pres_farma_cod") |> 
+  select(sip,
+         receta_id,
+         fecha_pres,
+         fecha_disp,
+         atc_cod,
+         atc_desc,
+         prin_act_cod,
+         prin_act_desc,
+         env_durac,
+         pres_farma_desc,
+         via_cod,
+         via_desc,
+         unidades,
+         cadencia) |>
+  transmute(
+    person_source_value = sip,
+    # drug_concept_id = "map",
+    drug_exposure_start_date = if_else(!is.na(fecha_disp),
+                                       fecha_disp, fecha_pres),
+    drug_exposure_start_datetime = drug_exposure_start_date,
+    drug_exposure_end_date = drug_exposure_start_date %m+% 
+      days(min(1, ceiling(env_durac), na.rm = TRUE)),
+    drug_exposure_end_datetime = drug_exposure_end_date,
+    verbatim_end_date = NA_Date_,
+    drug_type_concept_id = if_else(!is.na(fecha_disp),
+                                       32825, 32838),
+    stop_reason = NA_character_,
+    refills = NA_integer_,
+    quantity = 1,
+    days_supply = ceiling(env_durac),
+    sig =  glue("{unidades} form(s) each {cadencia} hours"),
+    # route_concept_id = "map",
+    lot_number = 0, # check if it is mandatory, else NA_integer
+    provider_id = NA_integer_,
+    visit_occurrence_id = NA_integer_,
+    visit_detail_id = NA_integer_,
+    drug_source_value = atc_cod,
+    # drug_source_concept_id = "map",
+    route_source_value = via_desc,
+    dose_unit_source_value = NA_character_
+            ) |> 
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) 
+
+```
+
+
+```{r}
+# mapping concept_ids--------------------------------------------------------
+from_gaia_to_drug_exposure <- from_gaia_to_drug_exposure_0 |> 
+  left_join(concepts_relationship_atc, 
+            by = c("drug_source_value")) |>
+  left_join(concepts_relationship_route,
+            by = c("route_source_value")) |>
+  mutate(drug_concept_id = if_else(is.na(drug_concept_id),
+                                         0, drug_concept_id)) |> 
+  mutate(drug_exposure_id = 1:n()) |> 
+  relocate(
+    drug_exposure_id,
+    person_id,
+    drug_concept_id,
+    drug_exposure_start_date,
+    drug_exposure_start_datetime,
+    drug_exposure_end_date,
+    drug_exposure_end_datetime,
+    verbatim_end_date,
+    drug_type_concept_id,
+    stop_reason,
+    refills,
+    quantity,
+    days_supply,
+    sig,
+    route_concept_id,
+    lot_number,
+    provider_id,
+    visit_occurrence_id,
+    visit_detail_id,
+    drug_source_value,
+    drug_source_concept_id,
+    route_source_value,
+    dose_unit_source_value
+  ) 
+
+```
+
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_gaia_to_drug_exposure, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_gaia_to_drug_exposure.csv"))
+
+last_gaia_drug_exposure_id <- 
+  max(from_gaia_to_drug_exposure$drug_exposure_id)
+
+# write table----------------------------------------------------------------
+fwrite(from_gaia_to_drug_exposure, append = FALSE,
+       file = file.path("Target_tables",
+                        "drug_exposure_vid.csv"))
+
+```
+
+```{r}
+# free up some memory--------------------------------------------------------
+rm(gaia)
+
+```
+
+## From siv to drug exposure
+
+```{r}
+# populate table-------------------------------------------------------------
+from_siv_to_drug_exposure_0 <- siv |>
+  # temporal fix -> move to curation script
+  filter(sip %in% sips_consign) |>
+  select(sip,
+         tipo_vacuna,
+         nombre_vacuna,
+         fecha_vacuna) |>
+  transmute(
+    person_source_value = sip,
+    # drug_concept_id = "map",
+    drug_exposure_start_date = fecha_vacuna,
+    drug_exposure_start_datetime = fecha_vacuna,
+    drug_exposure_end_date = fecha_vacuna,
+    drug_exposure_end_datetime = fecha_vacuna,
+    verbatim_end_date = NA_Date_,
+    drug_type_concept_id = 32818,
+    stop_reason = NA_character_,
+    refills = 0,
+    quantity = 1,
+    days_supply = 0,
+    sig =  NA_character_,
+    route_concept_id = 4302612, # intramuscular
+    lot_number = 0, # check if it is mandatory, else NA_integer
+    provider_id = NA_integer_,
+    visit_occurrence_id = NA_integer_,
+    visit_detail_id = NA_integer_,
+    drug_source_value = tipo_vacuna,
+    # drug_source_concept_id = "map",
+    route_source_value = "intramuscular",
+    dose_unit_source_value = NA_character_
+            ) |> 
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) 
+
+```
+
+
+```{r}
+# mapping concept_ids--------------------------------------------------------
+from_siv_to_drug_exposure <- from_siv_to_drug_exposure_0 |> 
+  left_join(concepts_relationship_siv_drug, 
+            by = c("drug_source_value")) |>
+  mutate(drug_exposure_id = 1:n() + last_gaia_drug_exposure_id) |> 
+  relocate(
+    drug_exposure_id,
+    person_id,
+    drug_concept_id,
+    drug_exposure_start_date,
+    drug_exposure_start_datetime,
+    drug_exposure_end_date,
+    drug_exposure_end_datetime,
+    verbatim_end_date,
+    drug_type_concept_id,
+    stop_reason,
+    refills,
+    quantity,
+    days_supply,
+    sig,
+    route_concept_id,
+    lot_number,
+    provider_id,
+    visit_occurrence_id,
+    visit_detail_id,
+    drug_source_value,
+    drug_source_concept_id,
+    route_source_value,
+    dose_unit_source_value
+  )
+
+```
+
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_siv_to_drug_exposure, append = FALSE,
+       file = file.path("Target_tables", "AUXILIAR",
+                        "from_siv_to_drug_exposure.csv"))
+
+# write table----------------------------------------------------------------
+fwrite(from_siv_to_drug_exposure, append = TRUE,
+       file = file.path("Target_tables",
+                        "drug_exposure_vid.csv"))
+
+```
+
+# fact_relationship
+
+## From mdr_to_fact_relationship
+
+::: {callout-important}
+
+This table cannot be populated because we don't have information about the sex of the children, and we cannot create a person entry for them. We have included this section in anticipation of the possibility of obtaining the sex of the newborns in the future.
+
+:::
+
+```{r}
+#  From mdr_to_fact_relationship---------------------------------------------
+# # mother to child
+# from_mdr_to_fact_relationship_mother <- mdr |> 
+#   distinct(sip_madre, sip_hijo) |> 
+#   mutate(domain_concept_id_1 = "32879") |> 
+#   mutate(domain_concept_id_2 = "32879") |> 
+#   mutate(relationship_concept_id = "4248584") |> 
+#   relocate(
+#     domain_concept_id_1,
+#     fact_id_1 = sip_madre,
+#     domain_concept_id_2,
+#     fact_id_2 = sip_hijo,
+#     relationship_concept_id
+#   )
+#   
+# # child to mother
+# from_mdr_to_fact_relationship_child <- mdr |> 
+#   distinct(sip_madre, sip_hijo) |> 
+#   mutate(domain_concept_id_1 = "32879") |> 
+#   mutate(domain_concept_id_2 = "32879") |> 
+#   mutate(relationship_concept_id = "4285883") |> 
+#   relocate(
+#     domain_concept_id_1,
+#     fact_id_1 = sip_hijo,
+#     domain_concept_id_2,
+#     fact_id_2 = sip_madre,
+#     relationship_concept_id
+#   )
+
+```
+
+```{r}
+# union of mother to child and child to mother-------------------------------
+# from_mdr_to_fact_relationship <- from_mdr_to_fact_relationship_mother |> 
+#   union(from_mdr_to_fact_relationship_child)
+# 
+# # write table----------------------------------------------------------------
+# # fwrite(from_mdr_to_fact_relationship, append = FALSE,
+# #        file = file.path("Target_tables", "AUXILIAR",
+# #                         "from_mdr_to_fact_relationship.csv"))
+# # 
+# # from_mdr_to_fact_relationship_write <- from_mdr_to_fact_relationship
+# 
+# # write table----------------------------------------------------------------
+# fwrite(from_mdr_to_fact_relationship, append = FALSE,
+#        file = file.path("Target_tables",
+#                         "fact_relationship_vid.csv"))
+  
+```
+
+# measurement
+
+The target table **measurement** is populated with the information from the source table **REDMIVA**.
+
+## From redmiva to measurement
+
+When tipo_prueba is (PCR) in the source table, the concept id is ’586310: Measurement of Severe acute respiratory syndrome coronavirus 2 (SARS-CoV-2) Genetic material using Molecular method), while when is antigen tests is mapped to ‘37310257: Measurement of Severe acute respiratory syndrome coronavirus 2 antigen’.
+
+```{r}
+# PCR
+concepts_vocabulary |> filter(concept_id == 586310)
+# Antigen
+concepts_vocabulary |> filter(concept_id == 37310257)
+# positive
+concepts_vocabulary |> filter(concept_id == 45884084)
+
+```
+
+
+```{r}
+# populate table-------------------------------------------------------------
+from_redmiva_to_measurement <- redmiva |> 
+  transmute(
+    measurement_id = 1:n(),
+    person_source_value = sip,
+    measurement_concept_id = case_when(
+      tipo_prueba == "PCR" ~ 586310,
+      tipo_prueba == "PCR" ~ 37310257,
+      T ~ 0),
+    measurement_date = fecha_prueba,
+    measurement_datetime = fecha_prueba,
+    measurement_time = fecha_prueba,
+    measurement_type_concept_id = 32856,
+    operator_concept_id = 0,
+    value_as_number = 0,
+    value_as_concept_id = 45884084,
+    unit_concept_id = 0,
+    range_low = 0,
+    range_high = 0,
+    provider_id = NA_integer_,
+    visit_occurrence_id = NA_integer_,
+    visit_detail_id = NA_integer_,
+    measurement_source_value = 0,
+    measurement_source_concept_id = 0,
+    unit_source_value = 0,
+    unit_source_concept_id = 0,
+    value_source_value = resultado,
+    measurement_event_id = NA_integer_,
+    meas_event_field_concept_id = 0) |>
+  left_join(person_ids, by = "person_source_value") |> 
+  select(-person_source_value) |> 
+  relocate(
+    measurement_id, 
+    person_id
+    )
+  
+# write table----------------------------------------------------------------
+fwrite(from_redmiva_to_measurement, append = FALSE,
+       file = file.path("Target_tables",
+                        "measurement_vid.csv"))
+
+```
+
+# cdm_source
+
+```{r}
+cdm_source <- tibble(
+  cdm_source_name = "vid_consign",
+  cdm_source_abbreviation = "vid_consign",
+  cdm_holder = "FISABIO-HSRP",
+  source_description = "Instance of the CONSIGN project utilizing the VID data",
+  source_documentation_reference = "https://github.com/frasansa/OHDSI-VID_to_OMOP_ETL",
+  cdm_etl_reference = "https://github.com/frasansa/OHDSI-VID_to_OMOP_ETL",
+  source_release_date = ymd("2022-01-01"),
+  cdm_release_date = ymd("2023-07-08"),
+  cdm_version = "5.4",
+  cdm_version_concept_id = 756265,
+  vocabulary_version = "v5.0 31-MAY-23"
+    )
+
+# write table----------------------------------------------------------------
+fwrite(cdm_source, append = FALSE,
+       file = file.path("Target_tables",
+                        "cdm_source_vid.csv"))
+
+```
+
+::: {.tocify-extend-page data-unique="tocify-extend-page" style="height: 0;"}
+:::
+
+
+

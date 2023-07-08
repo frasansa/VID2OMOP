@@ -1,0 +1,221 @@
+---
+title: "CONSIGN: MBDS Curation"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", "1-DATOS", 
+                                  "3-PROCESADOS")
+
+```
+
+```{r}
+# check names----------------------------------------------------------------
+table_sample <- fread(file.path(path_origenes_consign, 
+      "04_MBDS", "ext2", "V99",
+      "SD2270-CONSIGN-CMBD_18_21.enc.txt"), nrows = 100) |> 
+  clean_names() 
+
+table_sample |> names()
+
+```
+
+The next function clean the names of the datasource and fix the format of the dates variables.
+
+```{r}
+# function to load and rename vars--------------------------------------------
+clean_mbds_2018_2021 <- function(x, ...){
+
+# nombres auxiliares
+vars_d_p <- c(paste0("d", 1:30),
+              paste0("p", 1:30))  
+  
+fread(file = x, encoding = "Latin-1", na.strings = "",
+  # read code columns as character    
+  colClasses = list(character = 13:72), 
+  ...) |>
+  # change to lower case  
+  clean_names("snake") |> 
+  # rename variables
+  rename(
+    sip = num_sip,
+    fecha_ingreso = fec_ing,
+    fecha_alta = fec_alta,
+    dpto_cod = depto,
+    hosp_cod = hosp_cod,
+    serv_ing_cod = serving_cod,
+    serv_ing_desc = serving_desc,
+    tipo_activ = tipo_activ,
+    circ_ing_cod = circ_ingreso_cod,
+    circ_ing_desc = circ_ing_cod,
+    circ_alta_cod = circ_alta_cod,
+    circ_alta_desc = circ_alta_desc,
+    fecha_parto = fec_parto,
+    parto_multiple = parto_mult_casos,
+    semana_gest = tiempo_gest,
+    peso1 = hijo1_peso,
+    sexo1 = hijo1_sex_desc,
+    peso2 = hijo2_peso,
+    sexo2 = hijo2_desc,
+    peso3 = hijo3_peso,
+    sexo3 = hijo3_sex_desc,
+    ind_uci = ind_icu,
+    estancias_uci = estancias_uci) |> 
+  rename_with(~vars_d_p, .cols = diag_ppal:proc_sec_30_cod) |>
+  # fix dates
+  mutate(fecha_ingreso = dmy(fecha_ingreso),
+         fecha_alta = dmy(fecha_alta),
+         fecha_parto = dmy(fecha_parto)) |> 
+  # create tipo_codigo
+  mutate(tipo_codigo = if_else(year(fecha_alta) >= 2016, "ICD10ES", "ICD9CM")) |>  
+  # relocate variables
+   relocate(
+     sip,
+     fecha_ingreso,
+     fecha_alta,
+     dpto_cod,
+     hosp_cod,
+     serv_ing_cod,
+     serv_ing_desc,
+     tipo_activ,
+     circ_ing_cod,
+     circ_ing_desc,
+     circ_alta_cod,
+     circ_alta_desc,
+     d1:d30,
+     p1:p30,
+     tipo_codigo,
+     fecha_parto,
+     parto_multiple,
+     semana_gest,
+     peso1,
+     sexo1,
+     peso2,
+     sexo2,
+     peso3,
+     sexo3,
+     ind_uci,
+     estancias_uci
+   )
+}
+ 
+```
+
+```{r}
+# load and clean base---------------------------------------------------------
+mbds_0 <- clean_mbds_2018_2021(file.path(path_origenes_consign, 
+      "04_MBDS", "ext2", "V99",
+      "SD2270-CONSIGN-CMBD_18_21.enc.txt"))
+
+```
+
+# Fix bases with the feedback from the Quality Checks
+
+Note that we are using the *tidylog* variation of *tidyverse* verbs in order to obtain more information about the curation process.
+
+```{r}
+# depure base from QC feedback------------------------------------------------
+mbds_0 |> 
+  # check semana_gest
+  count(semana_gest)
+
+mbds <- mbds_0 |> 
+  # correct semana_gest
+  mutate(semana_gest = if_else(semana_gest < 3 | semana_gest > 45, 
+         NA_integer_, semana_gest)) |> 
+  # create a ICD10ES code corresponding to the gestational age
+  mutate(d_semana_gest = case_when(
+    semana_gest == 0 | semana_gest == 99 ~ "Z3A.00",
+    between(semana_gest, 1, 7) ~ "Z3A.01",
+    semana_gest == 8 ~ "Z3A.08",
+    semana_gest == 9 ~ "Z3A.09",
+    between(semana_gest, 10, 42) ~ as.character(glue("Z3A.{semana_gest}")),
+    between(semana_gest, 43, 50) ~ "Z3A.49",
+    T ~ NA_character_)) |> 
+  # fix format (save correctly spanish characters: "ñ", "´")
+  tidylog::mutate(serv_ing_desc = enc2utf8(serv_ing_desc),
+                  circ_ing_desc = enc2utf8(circ_ing_desc),
+                  circ_alta_desc = enc2utf8(circ_alta_desc)) |> 
+  # remove missing sip (RFqwh4PcfAcSBlICoKtN/w==)
+  tidylog::filter(sip != "RFqwh4PcfAcSBlICoKtN/w==") |>
+  # check duplicates
+  tidylog::distinct() |> 
+  # remove sips that don't pertain to the cohort
+  # tidylog::filter(sip %in% sips_clean) |> 
+  # fix fecha parto
+  tidylog::mutate(fecha_parto = if_else(
+    is.na(semana_gest) & is.na(peso1) & is.na(sexo1), 
+    NA_Date_, fecha_parto))
+  
+# checks
+mbds |> count(semana_gest, d_semana_gest)  #ok
+mbds |> distinct(circ_alta_desc)
+mbds |> distinct(circ_alta_cod, circ_alta_desc) |> arrange(circ_alta_cod)
+
+
+```
+
+# Save base
+
+```{r}
+# write table-----------------------------------------------------------------
+
+# save in SSD
+fwrite(mbds, append = FALSE, 
+       file = file.path("Origin_tables", "mbds.csv"))
+# save in CERES
+fwrite(mbds, file.path(procesados, "mbds.csv"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_04_MBDS_curation_CONSIGN.qmd"))
+file.copy(from = file.path("1_04_MBDS_curation_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

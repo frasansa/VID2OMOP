@@ -1,0 +1,147 @@
+---
+title: "CONSIGN: PMR Curation."
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                        "1-DATOS", "1-BRUTOS")
+path_origenes_pregval <- file.path( "F:", "CERES2", "PREGVAL", 
+                        "1-DATOS", "1-BRUTOS")
+
+```
+
+```{r}
+# cargar_bases---------------------------------------------------------------
+pmr_00 <- fread(file.path(path_origenes_pregval, "10_PMR", "TODO_EL_PERIODO",
+    "V99", "Resultado_Todo_Perinatal_SD2479-PREGVAL_2009_2021.enc.csv")) |> 
+  # change to lower case  
+  clean_names("snake")
+  
+```
+
+# Clean base
+
+```{r}
+# fix and clean base---------------------------------------------------------
+pmr_0 <- pmr_00 |>  
+  # rename vars
+  select(
+    sip = si_pmadre,
+    tipo_muerte = muerte,
+    fecha_muerte_hijo = fecham2,
+    fecha_nac_hijo = fecha_nac_nino2,
+    semana_gest = edadg,
+    peso = peso,
+    d1 = codigo_dgto1,
+    d2 = codigo_dgto2,
+    d3 = codigo_dgto3,
+    d4 = codigo_dgto4,
+    d5 = codigo_dgto5,
+    d6 = codigo_dgto6,
+    d7 = codigo_dgto7,
+    d8 = codigo_dgto8,
+    d9 = codigo_dgto9,
+    d10 = codigo_dgto10,
+    causa_muerte = cmuerte,
+    patologia_m1 = cod_patologiam1,
+    patologia_m2 = cod_patologiam2,
+    patologia_h1 = cod_patologiag1,
+    patologia_h2 = cod_patologiag2,
+    patologia_h3 = cod_patologiag3
+)
+
+```
+
+```{r}
+# clean pmr------------------------------------------------------------------
+# fix dates
+pmr_full <- pmr_0 |>
+  mutate(across(.cols = where(is.Date), ymd)) |> 
+# when the death is "fetal", set the fecha_muerte_hijo as the end of preg
+    mutate(fecha_muerte_hijo = pmax(fecha_nac_hijo, fecha_muerte_hijo, 
+                                    na.rm = TRUE)) |> 
+# when the death is "fetal", set as NA the fecha_nac_hijo
+    mutate(fecha_nac_hijo = if_else( 
+      tipo_muerte == "Fetal", NA_Date_, fecha_nac_hijo)) |>
+# create fecha_fin_emb for the pregnancy algorithm
+    mutate(fecha_fin_emb = if_else(tipo_muerte == "Fetal", fecha_muerte_hijo, fecha_nac_hijo)) |>
+  relocate(sip, fecha_nac_hijo, fecha_muerte_hijo, fecha_fin_emb) 
+
+```
+
+# Save base
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(pmr_full, append = FALSE, 
+       file = file.path("Origin_tables", "auxiliar", "pmr_full.csv"))
+
+```
+
+```{r}
+pmr <- pmr_full |> filter(fecha_fin_emb >= ymd("2018-01-01"))
+
+pmr |> count(year(fecha_fin_emb))
+
+```
+
+
+```{r write_pmr, echo=FALSE, message=FALSE, warning=FALSE}
+# write table----------------------------------------------------------------
+fwrite(pmr, append = FALSE, file = file.path("Origin_tables", "pmr.csv"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_10_PMR_Curation_CONSIGN.qmd"))
+file.copy(from = file.path("1_10_PMR_Curation_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>
+
+

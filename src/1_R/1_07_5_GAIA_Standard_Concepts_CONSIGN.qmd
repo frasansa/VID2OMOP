@@ -1,0 +1,1576 @@
+---
+title: "CONSIGN: GAIA Curation. Part V"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+```{r}
+# load gaia------------------------------------------------------------------
+gaia_clinical_drugs <- fread(file.path("Resultados", "gaia_masters",
+                                      "gaia_clinical_drugs.csv"),
+                             encoding = "Latin-1")
+
+```
+
+```{r}
+# load concepts vocabulary---------------------------------------------------
+concepts_vocabulary <- fread(file.path("..", "EHDEN",
+  "Vocabularies", "CONCEPT.csv"))
+concepts_relationship <- fread(file.path("..", "EHDEN",
+  "Vocabularies", "CONCEPT_RELATIONSHIP.csv"))
+concepts_ancestor <- fread(file.path("..", "EHDEN",
+  "Vocabularies", "CONCEPT_ANCESTOR.csv"))
+
+```
+
+```{r}
+# check multiple descriptions------------------------------------------------
+gaia_clinical_drugs |> 
+  add_count(pres_farma_cod) |> 
+  filter(n > 1)
+
+```
+
+# Fix formas and nformas
+
+```{r}
+# fix "forma" and "nforma"---------------------------------------------------
+pres_farma_master <- gaia_clinical_drugs |> distinct(
+  pres_farma_cod,
+  pres_farma_desc)
+
+pres_farma_master2 <- pres_farma_master |> 
+  mutate(
+  texto_forma = str_split_fixed(pres_farma_desc,
+  pattern = " / ", n = 2)[,2],
+# extract first number and word after the "/"--------------------------------------
+  nforma = str_split(texto_forma, pattern = " ", simplify = TRUE, n = 3)[, 1],
+  forma = str_split(texto_forma, pattern = " ", simplify = TRUE, n = 3)[, 2])
+
+```
+
+## Fix nformas
+
+```{r}
+# fix errors in nforma-------------------------------------------------------
+raw_nformas <- pres_farma_master2 |> distinct(nforma) |> 
+  arrange(nforma) |> pull()
+
+```
+
+
+```{r}
+# fix nforma = ""------------------------------------------------------------
+pres_farma_master2 |> filter(nforma == raw_nformas[1]) |> 
+  arrange(pres_farma_cod)
+
+pres_farma_master3 <- pres_farma_master2 |> 
+  mutate(nforma = case_when(
+    pres_farma_cod == 2740 ~ "28",
+    pres_farma_cod == 5799 ~ "5",
+    pres_farma_cod == 7807 ~ "1",
+    pres_farma_cod == 8837 ~ "2",
+    pres_farma_cod == 9373 ~ "28",
+    pres_farma_cod == 10213 ~ "30",
+    pres_farma_cod == 10365 ~ "1",
+    pres_farma_cod == 10923 ~ "40",
+    pres_farma_cod == 11085 ~ "10",
+    pres_farma_cod == 11316 ~ "1",
+    pres_farma_cod == 11399 ~ "1",
+    pres_farma_cod == 11431 ~ "1",
+    pres_farma_cod == 11448 ~ "1",
+    pres_farma_cod == 11555 ~ "1",
+    pres_farma_cod == 12219 ~ "1",
+    pres_farma_cod == 12272 ~ "30",
+    pres_farma_cod == 12273 ~ "60",
+    pres_farma_cod == 12787 ~ "5",
+    pres_farma_cod == 12790 ~ "5",
+    pres_farma_cod == 13010 ~ "1",
+    pres_farma_cod == 14155 ~ "30",
+    pres_farma_cod == 15923 ~ "1",
+    pres_farma_cod == 16262 ~ "1",
+    pres_farma_cod == 16506 ~ "20",
+    pres_farma_cod == 16870 ~ "1",
+    pres_farma_cod == 17080 ~ "1",
+    pres_farma_cod == 17171 ~ NA_character_,
+    pres_farma_cod == 17936 ~ "6",
+    pres_farma_cod == 17938 ~ "6",
+    pres_farma_cod == 18480 ~ "1",
+    pres_farma_cod == 23524 ~ "1",
+    pres_farma_cod == 23670 ~ NA_character_,
+    pres_farma_cod == 23723 ~ "1",
+    pres_farma_cod == 24103 ~ NA_character_,
+    pres_farma_cod == 24439 ~ NA_character_,
+    pres_farma_cod == 24473 ~ NA_character_,
+    pres_farma_cod == 24696 ~ "1",
+    pres_farma_cod == 25085 ~ NA_character_,
+    pres_farma_cod == 25143 ~ NA_character_,
+    pres_farma_cod == 25153 ~ NA_character_,
+    pres_farma_cod == 25459 ~ "1",
+    pres_farma_cod == 25584 ~ NA_character_,
+    pres_farma_cod == 25599 ~ NA_character_,
+    pres_farma_cod == 25704 ~ NA_character_,
+    pres_farma_cod == 25722 ~ "1",
+    pres_farma_cod == 25723 ~ "1",
+    pres_farma_cod == 26281 ~ NA_character_,
+    pres_farma_cod == 26356 ~ NA_character_,
+    pres_farma_cod == 26443 ~ "1",
+    pres_farma_cod == 26573 ~ "1",
+    pres_farma_cod == 27528 ~ NA_character_,
+    pres_farma_cod == 27529 ~ NA_character_,
+    pres_farma_cod == 27807 ~ NA_character_,
+    pres_farma_cod == 27834 ~ NA_character_,
+    pres_farma_cod == 27894 ~ NA_character_,
+    pres_farma_cod == 28120 ~ "1",
+    pres_farma_cod == 28755 ~ NA_character_,
+      T ~ nforma
+  )) |> 
+  mutate(forma = case_when(
+    pres_farma_cod == 2740 ~ "CAPSULAS LIBERACION RETARDADA",
+    pres_farma_cod == 5799 ~ "PARCHE TRANSDERMICO",
+    pres_farma_cod == 7807 ~ "SOLUCION",
+    pres_farma_cod == 8837 ~ "PULVERIZADOR",
+    pres_farma_cod == 9373 ~ "COMPRIMIDOS RECUBIERTOS",
+    pres_farma_cod == 10213 ~ "JERINGA",
+    pres_farma_cod == 10365 ~ "VIAL",
+    pres_farma_cod == 10923 ~ "COMPRIMIDOS RECUBIERTOS",
+    pres_farma_cod == 11085 ~ "COMPRIMIDOS",
+    pres_farma_cod == 11316 ~ "SOLUCION",
+    pres_farma_cod == 11399 ~ "SPRAY",
+    pres_farma_cod == 11431 ~ "SOLUCION",
+    pres_farma_cod == 11448 ~ "JARABE",
+    pres_farma_cod == 11555 ~ "VIAL + JERINGA",
+    pres_farma_cod == 12219 ~ "SPRAY NASAL",
+    pres_farma_cod == 12272 ~ "CAPSULAS",
+    pres_farma_cod == 12273 ~ "CAPSULAS",
+    pres_farma_cod == 12787 ~ "CARTUCHO/PLUMA",
+    pres_farma_cod == 12790 ~ "CARTUCHO/PLUMA",
+    pres_farma_cod == 13010 ~ "SOLUCION GOTAS",
+    pres_farma_cod == 14155 ~ "COMPRIMIDOS SUBLINGUALES",
+    pres_farma_cod == 15923 ~ "SOLUCION",
+    pres_farma_cod == 16262 ~ "GOTAS NASALES",
+    pres_farma_cod == 16506 ~ "SOBRES",
+    pres_farma_cod == 16870 ~ "GRANULADO PARA SUSPENSION ORAL",
+    pres_farma_cod == 17080 ~ "SOLUCION PARA PULVERIZACION NASAL",
+    pres_farma_cod == 17171 ~ "CAPSULAS",
+    pres_farma_cod == 17936 ~ "SOLUCION PARA PULVERIZACION NASAL",
+    pres_farma_cod == 17938 ~ "SOLUCION PARA PULVERIZACION NASAL",
+    pres_farma_cod == 18480 ~ "SOLUCION",
+    pres_farma_cod == 23524 ~ "SOLUCION",
+    pres_farma_cod == 23670 ~ "CAPSULAS",
+    pres_farma_cod == 23723 ~ "JERINGA",
+    pres_farma_cod == 24103 ~ "CAPSULAS",
+    pres_farma_cod == 24439 ~ "CAPSULAS",
+    pres_farma_cod == 24473 ~ "CAPSULAS",
+    pres_farma_cod == 24696 ~ "SUSPENSION",
+    pres_farma_cod == 25085 ~ "SOBRES",
+    pres_farma_cod == 25143 ~ "CAPSULAS",
+    pres_farma_cod == 25153 ~ "CAPSULAS",
+    pres_farma_cod == 25459 ~ "SUSPENSION",
+    pres_farma_cod == 25584 ~ "CAPSULAS",
+    pres_farma_cod == 25599 ~ "CAPSULAS",
+    pres_farma_cod == 25704 ~ "CAPSULAS",
+    pres_farma_cod == 25722 ~ "INHALADOR",
+    pres_farma_cod == 25723 ~ "INHALADOR",
+    pres_farma_cod == 26281 ~ "CAPSULAS",
+    pres_farma_cod == 26356 ~ "CAPSULAS",
+    pres_farma_cod == 26443 ~ "SUSPENSION",
+    pres_farma_cod == 26573 ~ "PLUMA PREGARGADA",
+    pres_farma_cod == 27528 ~ "CAPSULAS",
+    pres_farma_cod == 27529 ~ "CAPSULAS",
+    pres_farma_cod == 27807 ~ "SOBRES",
+    pres_farma_cod == 27834 ~ "SOBRES",
+    pres_farma_cod == 27894 ~ "SOBRES",
+    pres_farma_cod == 28120 ~ "INHALADOR",
+    pres_farma_cod == 28755 ~ "SOBRES",
+    T ~ forma
+  ))
+
+# check correction
+pres_farma_master3 |> filter(nforma == raw_nformas[1])
+
+```
+
+```{r}
+# fix nforma = "(xxMG/xxMG)"--------------------------------------------------
+pres_farma_master3 |> filter(nforma %in% c(raw_nformas[2], raw_nformas[3])) |> 
+  arrange(pres_farma_cod)
+
+pres_farma_master4 <- pres_farma_master3 |> 
+  mutate(nforma = case_when(
+    pres_farma_cod == 16326 ~ "1",
+    pres_farma_cod == 16433 ~ "1",
+    T ~ nforma)) |>
+  mutate(forma = case_when(
+    pres_farma_cod == 16326 ~ "VIAL + JERINGA",
+    pres_farma_cod == 16433 ~ "VIAL + JERINGA",
+    T ~ forma)) 
+
+# check correction
+pres_farma_master4 |> filter(nforma == raw_nformas[2]) |> 
+  arrange(pres_farma_cod)
+pres_farma_master4 |> filter(nforma == raw_nformas[3]) |> 
+  arrange(pres_farma_cod)
+
+```
+
+
+
+```{r}
+# fix nforma = raw_nformas[4, 5, 6, 7, 8]-------------------------------------
+pres_farma_master4 |> filter(nforma %in% c(raw_nformas[4],
+                                           raw_nformas[5],
+                                           raw_nformas[6],
+                                           raw_nformas[7],
+                                           raw_nformas[8]
+                                           )) |> 
+  arrange(pres_farma_cod)
+
+pres_farma_master5 <- pres_farma_master4 |> 
+  mutate(nforma = case_when(
+    pres_farma_cod == 6614 ~ "1",
+    pres_farma_cod == 13684 ~ "28",
+    pres_farma_cod == 14301 ~ "30",
+    pres_farma_cod == 27403 ~ "1",
+    pres_farma_cod == 27753 ~ "1",
+    TRUE ~ nforma
+  )) |> 
+  mutate(forma = case_when(
+    pres_farma_cod == 6614 ~ "SOL ORAL",
+    pres_farma_cod == 13684 ~ "COMPRIMIDOS RECUBIERTOS",
+    pres_farma_cod == 14301 ~ "GRAGEAS",
+    pres_farma_cod == 27403 ~ "EMULSION",
+    pres_farma_cod == 27753 ~ "SOLUCION",
+    TRUE ~ forma
+  ))
+
+# check correction
+pres_farma_master5 |> filter(nforma %in% c(raw_nformas[4],
+                                           raw_nformas[5],
+                                           raw_nformas[6],
+                                           raw_nformas[7],
+                                           raw_nformas[8]
+                                           )) |> 
+  arrange(pres_farma_cod)
+
+```
+
+```{r}
+# fix nforma = raw_nformas[12]-------------------------------------------------
+pres_farma_master5 |> filter(nforma %in% c(raw_nformas[12]
+                                           )) |> 
+  arrange(pres_farma_cod)
+
+pres_farma_master6 <- pres_farma_master5 |> 
+  mutate(nforma = case_when(
+    pres_farma_cod == 28591 ~ "56",
+    pres_farma_cod == 28592 ~ "56",
+    TRUE ~ nforma
+  )) |> 
+  mutate(forma = case_when(
+    pres_farma_cod == 28591 ~ "COMPRIMIDOS",
+    pres_farma_cod == 28592 ~ "COMPRIMIDOS",
+    TRUE ~ forma
+  ))
+
+# check correction
+pres_farma_master6 |> filter(nforma %in% c(raw_nformas[12]
+                                           )) |> 
+  arrange(pres_farma_cod)
+
+```
+
+```{r}
+# fix nforma = raw_nformas[16, 75]-------------------------------------------------
+pres_farma_master6 |> filter(nforma %in% c(raw_nformas[16],
+                                           raw_nformas[20],
+                                           raw_nformas[25],
+                                           raw_nformas[29],
+                                           raw_nformas[38],
+                                           raw_nformas[41],
+                                           raw_nformas[57],
+                                           raw_nformas[59],
+                                           raw_nformas[62],
+                                           raw_nformas[63],
+                                           raw_nformas[64],
+                                           raw_nformas[65],
+                                           raw_nformas[66],
+                                           raw_nformas[67],
+                                           raw_nformas[68],
+                                           raw_nformas[69],
+                                           raw_nformas[70],
+                                           raw_nformas[71],
+                                           raw_nformas[72],
+                                           raw_nformas[73],
+                                           raw_nformas[74],
+                                           raw_nformas[75]
+                                           )) |> 
+  arrange(pres_farma_cod)
+                                           
+                                           
+pres_farma_master7 <- pres_farma_master6 |> 
+  mutate(nforma = case_when(
+    pres_farma_cod == 13967 ~ "1",
+    pres_farma_cod == 25772 ~ "30",
+    pres_farma_cod == 14194 ~ "30",
+    pres_farma_cod == 25509 ~ "27",
+    pres_farma_cod == 4027 ~ "1",
+    pres_farma_cod == 27336 ~ "60",
+    pres_farma_cod == 12841 ~ "1",
+    pres_farma_cod == 24747 ~ "56",
+    pres_farma_cod == 15094 ~ "40",
+    pres_farma_cod == 27445 ~ "30",
+    pres_farma_cod == 25579 ~ "1",
+    pres_farma_cod == 26277 ~ "1",
+    pres_farma_cod == 27584 ~ "1",
+    pres_farma_cod == 28745 ~ "1",
+    pres_farma_cod == 6712 ~ "1",
+    pres_farma_cod == 6713 ~ "1",
+    pres_farma_cod == 27600 ~ "30",
+    nforma == "CAPSULAS" ~ NA_character_,
+    nforma == "GEL" ~ "1",
+    nforma == "POMADA" ~ "1",    
+    nforma == "SOLUCION" ~ "1",
+    nforma == "SUSP" ~ "1",
+    nforma == "SUSPENSION" ~ "1",
+    nforma == "SOLUCIÓN" ~ "1",
+    nforma == "SOLUCIÓN" ~ "1",
+    nforma == "SOBRES" ~ NA_character_,
+    TRUE ~ nforma
+  )) |> 
+  mutate(forma = case_when(
+    pres_farma_cod == 13967 ~ "JERINGA",
+    pres_farma_cod == 25772 ~ "COMPRIMIDOS",
+    pres_farma_cod == 14194 ~ "JERINGA",
+    pres_farma_cod == 25509 ~ "COMPRIMIDOS",
+    pres_farma_cod == 4027 ~ "VIAL",
+    pres_farma_cod == 27336 ~ "COMPRIMIDOS",
+    pres_farma_cod == 12841 ~ "SUSPENSION",
+    pres_farma_cod == 24747 ~ "COMPRIMIDOS",
+    pres_farma_cod == 15094 ~ "GRAGEAS",
+    pres_farma_cod == 27445 ~ "COMPRIMIDOS",
+    pres_farma_cod == 25579 ~ "CREMA",
+    pres_farma_cod == 26277 ~ "SUSPENSION",
+    pres_farma_cod == 27584 ~ "SUSPENSION",
+    pres_farma_cod == 28745 ~ "SOLUCION",
+    pres_farma_cod == 6712 ~ "SPRAY NASAL",
+    pres_farma_cod == 6713 ~ "SPRAY NASAL",
+    pres_farma_cod == 27600 ~ "COMPRIMIDOS",
+    texto_forma == "CAPSULAS" ~ "CAPSULAS",
+    texto_forma == "GEL" ~ "GEL",
+    texto_forma == "POMADA" ~ "POMADA",
+    texto_forma == "SOLUCION" ~ "SOLUCION",
+    texto_forma == "SUSP" ~ "SUSPENSION ORAL",
+    texto_forma == "SUSPENSION" ~ "SUSPENSION",
+    texto_forma == "SOLUCIÓN" ~ "SOLUCIÓN",
+    texto_forma == "SOBRES" ~ "SOBRES",
+    TRUE ~ forma
+  ))
+
+# check correction
+pres_farma_master7 |> filter(nforma %in% c(raw_nformas[16],
+                                           raw_nformas[20],
+                                           raw_nformas[25],
+                                           raw_nformas[29],
+                                           raw_nformas[38],
+                                           raw_nformas[41],
+                                           raw_nformas[57],
+                                           raw_nformas[59],
+                                           raw_nformas[62],
+                                           raw_nformas[63],
+                                           raw_nformas[64],
+                                           raw_nformas[65],
+                                           raw_nformas[66],
+                                           raw_nformas[67],
+                                           raw_nformas[68],
+                                           raw_nformas[69],
+                                           raw_nformas[70],
+                                           raw_nformas[71],
+                                           raw_nformas[72],
+                                           raw_nformas[73],
+                                           raw_nformas[74],
+                                           raw_nformas[75]
+                                           )) |> 
+  arrange(pres_farma_cod)
+
+```
+
+## Fix formas
+
+```{r}
+# fix errors in nforma-------------------------------------------------------
+raw_formas <- pres_farma_master7 |> distinct(forma) |> 
+  arrange(forma) |> pull()
+
+```
+
+
+```{r}
+# fix forma -----------------------------------------------------------------
+pres_farma_master7 |> filter(forma %in% c(
+  raw_formas[38],
+  raw_formas[39],
+  raw_formas[40],
+  raw_formas[73]
+                                          )) |> 
+  arrange(pres_farma_cod)
+
+pres_farma_master8 <- pres_farma_master7 |> 
+  mutate(nforma = case_when(
+    pres_farma_cod == 4841 ~  "1",
+    pres_farma_cod == 14125 ~ "1",
+    pres_farma_cod == 28691 ~ "1",
+    pres_farma_cod == 17277 ~ "20", 
+    pres_farma_cod == 10360 ~ "1", 
+    pres_farma_cod == 22136 ~ "1", 
+    T ~ nforma)) |>
+  mutate(forma = case_when(
+    pres_farma_cod == 4841 ~  "JERINGA",
+    pres_farma_cod == 14125 ~ "JERINGA",
+    pres_farma_cod == 28691 ~ "JERINGA",
+    pres_farma_cod == 17277 ~ "GRAGEAS",
+    pres_farma_cod == 10360 ~ "JERINGA",
+    pres_farma_cod == 22136 ~ "JERINGA",
+    T ~ forma)) 
+
+# check correction
+pres_farma_master8 |> filter(forma %in% c(
+  raw_formas[38],
+  raw_formas[39],
+  raw_formas[40],
+  raw_formas[73]
+                                          )) |> 
+  arrange(pres_farma_cod)
+
+```
+
+```{r}
+# fix nforma as integer------------------------------------------------------
+pres_farma_master9 <- pres_farma_master8 |> 
+  mutate(nforma = as.integer(nforma)) |> 
+  select(-texto_forma)  
+
+```
+
+```{r}
+# add forma and nforma-------------------------------------------------------
+gaia_clinical_drugs2 <- gaia_clinical_drugs |>
+    left_join(pres_farma_master9, by = c("pres_farma_cod", "pres_farma_desc"))
+
+```
+
+
+# Add english names 
+
+## Add act_desc
+
+```{r}
+# translate to english active principles-------------------------------------
+gaia_act_desc <- gaia_clinical_drugs2 |> 
+  distinct(prin_act_desc) |> arrange(prin_act_desc)
+
+gaia_act_desc |> pull()
+
+gaia_act_desc_english <- gaia_act_desc |> 
+  mutate(prin_act_desc_english = c(
+"abacavir",
+"abacavir + lamivudine",
+"abatacept",
+"acarbose",
+"aceclofenaco",
+"acenocumarol",
+"acetylcysteine",
+"acetylsalicylic + chlorphenamine + phenylephrine",
+"acetylsalicylic acid",
+"acetylsalicylic acid + ascorbic acid",
+"acetylsalicylic acid + caffeine",
+"acetylsalicylic acid + codeine",
+"acetylsalicylic acid + codeine + caffeine",
+"acetylsalicylic acid + paracetamol + caffeine",
+"aciclovir",
+"cromoglicic acid",
+"salicylic acid + fluorouracil",
+"aclidinium",
+"aclidinium + formoterol",
+"adalimumab",
+"adrenaline",
+"agomelatine",
+"seawater",
+"albiglutide",
+"aldesleukin",
+"alemtuzumab",
+"aliskiren",
+"aliskiren + hydrochlorothiazide",
+"almotriptan",
+"alogliptin",
+"alogliptin + metformin",
+"alogliptin + pioglitazone",
+"alprazolam",
+"alteplase",
+"altizide + spironolactone",
+"amantadine",
+"ambisentan",
+"ambroxol",
+"amphotericin b",
+"amikacin",
+"amiloride hydrochloride",
+"aminolevulinic acid",
+"amiodarone",
+"amiodarone hydrochloride",
+"amisulpride",
+"amitriptyline",
+"amitriptyline + medazepam",
+"amlodipine",
+"amlodipine + ramipril",
+"amoxicillin",
+"amoxicillin + clavulanic acid",
+"ampicillin",
+"ampicillin + ampicillin benzatine",
+"anagrelide",
+"anakinra",
+"anastrozole",
+"hepatitis a antigen",
+"hepatitis b antigen + hepatitis a antigen",
+"meningococcal polysaccharide antigen a,c,w,y",
+"hepatitis b surface antigen",
+"influenza virus surface antigen",
+"salmonella typhi capsular polysaccharide vi antigen",
+"apixaban",
+"apremilast",
+"aripiprazole",
+"artemisinin + piperaquine tetrafosfate tetrahydrate",
+"asenapine",
+"atazanavir",
+"atenolol",
+"atenolol + bendroflumethiazide",
+"atenolol + chlorthalidone",
+"atenolol + hydrochlorothiazide + amiloride",
+"atomoxetine",
+"atovaquine",
+"atovacuona + proguanil",
+"azathioprine",
+"azelastine",
+"azelastine + fluticasone",
+"azithromycin",
+"aztreonam",
+"b.pertussis + t. tetanico + t. difterico",
+"bambuterol",
+"baricitinib",
+"barnidipine",
+"bcg atenuado",
+"beclometasone",
+"beclometasone + formoterol + glycopyrronium",
+"beclometasone dipropionate + formoterol fumarate dihydrate",
+"belimumab",
+"bemiparin",
+"benazepril",
+"benazepril + hydrochlorothiazide",
+"benzylpenicillin",
+"benzylpenicillin (sodium - procaine - benzathine)",
+"benzylpenicillin (sodium + benzathine) + phenoxymethylpenicillin",
+"benralizumab",
+"bentazepam",
+"benznidazole",
+"betamethasone",
+"bevacizumab",
+"bexarotene",
+"bicalutamide",
+"bisoprolol",
+"bisoprolol + hydrochlorothiazide",
+"bordetella pertussis toxoid + bordetella pertussis filamentous hemagglutinin + bordetella pertussis pertactin + polio virus type I + polio virus type II + polio virus type III + diphtheria toxoid + tetanus toxoid",
+"bosentan",
+"brivudine",
+"brodalumab",
+"bromazepam",
+"bromhexine",
+"bromhexine + diphenhydramine + codeine + ephedrine",
+"tiotropium bromide (DPI)",
+"brotizolam",
+"budesonide",
+"bumetanide",
+"buprenorphine",
+"bupropion",
+"caffeine",
+"canagliflozin",
+"canagliflozin + metformin",
+"canakinumab",
+"candesartan",
+"candesartan + hydrochlorothiazide",
+"capecitabine",
+"captopril",
+"captopril + hydrochlorothiazide",
+"carbocisteine",
+"carbocisteine + promethazine",
+"cariprazine",
+"carvedilol",
+"carvedilol + ivabradine",
+"cefaclor",
+"cefadroxil",
+"cefalexin",
+"cefalexin monohydrate",
+"cefazolin",
+"cefditoren",
+"cefepime",
+"cefixime",
+"cefotaxime",
+"cefoxitin",
+"ceftazidime",
+"ceftazidime + avibactam",
+"ceftriaxone",
+"cefuroxime",
+"celecoxib",
+"celiprolol",
+"certolizumab pegol",
+"cetirizine + pseudoephedrine",
+"ciclesonide",
+"cyclophosphamide",
+"cyclosporine",
+"cilazapril",
+"cilazapril + hydrochlorothiazide",
+"cilostazol",
+"cimetidine",
+"ciprofloxacin",
+"citalopram",
+"citicholine",
+"cladribine",
+"clarithromycin",
+"clindamycin",
+"clindamycin hydrochloride",
+"clindamycin HCl + triamcinolone acetonide",
+"clobazam",
+"clomethiazole",
+"clomipramine",
+"clonidine",
+"clonidine hydrochloride",
+"clonixinate lysine",
+"cloperastine",
+"clopidogrel",
+"clopidogrel + acetylsalicylic acid",
+"chlorambucil",
+"clorazepate dipotassium",
+"chlorcyclizine + guaifenesin + codeine + cineole",
+"chlorodiazepoxide",
+"chlorphenamine + codeine + pseudoephedrine",
+"chlorphenamine + dexamethasone + neomycin + lysozyme",
+"chlorphenamine + dextromethorphan + ephedrine",
+"chlorphenamine + diphenhydramine + phenylephrine",
+"chlorphenamine + paracetamol + pseudoephedrine",
+"chloroquine",
+"chlorpromazine",
+"chlorthalidone",
+"chlorthalidone + spironolactone",
+"clozapine",
+"clotiazepam",
+"cloxacillin",
+"clozapine",
+"cobisitat + atazanavir",
+"cobisitat + tenofovir (TAF) + emtricitabine + darunavir",
+"codeine",
+"colistimethate",
+"colistin",
+"pregnancy and lactation dietary supplement",
+"chondroitin sulfate",
+"cotrimoxazole (sulfamethoxazole + trimethoprim)",
+"dabigatran",
+"daclatasvir",
+"dalteparin",
+"dapagliflozin",
+"dapsone",
+"dapsone + iron oxalate",
+"darunavir",
+"darunavir + cobicistat",
+"dasabuvir",
+"deanol + heptaminol",
+"deflazacort",
+"delapril + manidipine",
+"desvenlafaxine",
+"dexamethasone",
+"dexibuprofen",
+"dexketoprofen",
+"dexketoprofen + tramadol",
+"dextromethorphan",
+"dextromethorphan + sodium benzoate",
+"dextromethorphan + benzocaine + benzoate + guaiacol",
+"dextromethorphan + chlorphenamine + paracetamol",
+"dextromethorphan + phenylpropanolamine",
+"dextromethorphan + diphenhydramine",
+"dextromethorphan + phenylephrine",
+"dextromethorphan + guaifenesin",
+"dextromethorphan + pseudoephedrine",
+"dextromethorphan + pseudoephedrine + triprolidine",
+"diacerin",
+"diazepam",
+"diazepam + pyridoxine",
+"diclofenac",
+"diclofenac + misoprostol",
+"didanosine",
+"diphtheria + pertussis + tetanus + h. influenzae + polio",
+"dihydrocodeine",
+"dihydroergocristine",
+"dihydroergocristine + cinnarizine",
+"dihydroergocristine + piracetam",
+"diltiazem",
+"diltiazem hydrochloride",
+"dipyridamole",
+"disopyramide",
+"dolutegravir",
+"dolutegravir + abacavir + lamivudine",
+"dolutegravir + lamivudine",
+"dolutegravir + rilpivirine",
+"donepezil",
+"doravirine",
+"doxazosin",
+"doxepin",
+"doxycycline",
+"doxorubicin",
+"dronabinol + cannabidiol",
+"dronedarone",
+"drosera fluid extract + thyme fluid extract",
+"dulaglutide",
+"duloxetine",
+"ebastine + pseudoephedrine",
+"eculizumab",
+"edoxaban",
+"efavirenz",
+"efavirenz + tenofovir + emtricitabine",
+"ephedrine",
+"eletriptan",
+"elvitegravir + cobicistat + emtricitabine + tenofovir",
+"empagliflozin",
+"empagliflozin + linagliptin",
+"emtricitabine + rilpivirine + tenofovir alafenamide",
+"emtricitabine + rilpivirine + tenofovir disoproxil fumarate",
+"enalapril",
+"enalapril + hydrochlorothiazide",
+"enalapril + nitrendipine",
+"enoxaparin",
+"entecavir",
+"eplerenone",
+"epoetin alfa",
+"epoetin beta",
+"epoetin zeta",
+"epoprostenol",
+"eprosartan",
+"eprosartan + hydrochlorothiazide",
+"erenumab",
+"ergotamine + caffeine",
+"ergotamine + paracetamol + caffeine",
+"erythromycin",
+"ertapenem",
+"ertugliflozin",
+"ertugliflozin + metformin",
+"escitalopram",
+"spiramycin",
+"spiramycin + metronidazole",
+"spironolactone",
+"streptomycin",
+"streptokinase + streptodornase",
+"ethambutol",
+"ethambutol + isoniazid + pyrazinamide + rifampicin",
+"etanercept",
+"ethylfrine",
+"etoposide",
+"etoricoxib",
+"etravirine",
+"everolimus",
+"exemestane",
+"exenatide",
+"famciclovir",
+"famotidine",
+"felodipine",
+"felodipine + ramipril",
+"phenazopyridine + sulfamethizole",
+"phenylephrine",
+"phenytoin",
+"phenoxymethylpenicillin",
+"fentanyl",
+"filgotinib",
+"filgrastim",
+"fingolimod",
+"flecainide",
+"fluconazole",
+"fludarabine",
+"fludrocortisone",
+"fludrocortisone acetate",
+"fluphenazine",
+"fluoxetine",
+"flupentixol",
+"flurazepam",
+"flutamide",
+"fluticasone",
+"fluvoxamine",
+"fondaparinux",
+"formoterol",
+"formoterol + budesonide",
+"formoterol + fluticasone",
+"fosamprenavir",
+"phosphoglycoprotein",
+"fosfomycin",
+"fosinopril",
+"fosinopril + hydrochlorothiazide",
+"fremanezumab",
+"frovatriptan",
+"fulvestrant",
+"furosemide",
+"furosemide + triamterene",
+"fusidic acid",
+"g-aminobutyric acid + magnesium glutamate + pyridoxine",
+"galantamine",
+"galcanezumab",
+"anti-Rh immunoglobulin",
+"anti-hepatitis B immunoglobulin",
+"anti-rabies immunoglobulin",
+"anti-tetanus immunoglobulin",
+"gentamicin",
+"ginkgo biloba",
+"glatiramer acetate",
+"glecaprevir + pibrentasvir",
+"glibenclamide",
+"gliclazide",
+"glycopyrronium",
+"glimepiride",
+"glipizide",
+"glisentide",
+"glucosamine",
+"glutamic acid",
+"golimumab",
+"guar gum",
+"goserelin",
+"grazoprevir + elbasvir",
+"guaifenesin",
+"guaifenesin + diprophylline + betamethasone",
+"guaifenesin + pseudoephedrine",
+"guaifenesin + pseudoephedrine + triprolidine",
+"guanfacine",
+"guselkumab",
+"haloperidol",
+"hederahelix leaf hydroalcoholic extract",
+"heparin",
+"hyaluronic acid",
+"hydralazine",
+"hydrochlorothiazide",
+"hydrochlorothiazide + amiloride",
+"hydrocortisone",
+"hydromorphone",
+"hydroquinidine",
+"hydroxycarbamide",
+"hydroxychloroquine",
+"hydroxyzine",
+"hydroxyzine hydrochloride + cimetidine",
+"ibuprofen",
+"ibuprofen + codeine",
+"ibuprofen + pseudoephedrine",
+"idebenone",
+"iloprost",
+"imidapril",
+"imipramine",
+"indacaterol",
+"indacaterol + glycopyrronium",
+"indacaterol + mometasone",
+"indapamide",
+"indomethacin",
+"indomethacin + metronidazole + ivermectin",
+"indomethacin + prednisone",
+"infliximab",
+"human immunoglobulin G",
+"human normal immunoglobulin",
+"insulin aspart",
+"insulin aspart + insulin aspart protamine",
+"intermediate-acting insulin aspart",
+"biphasic insulin",
+"insulin degludec",
+"insulin detemir",
+"insulin glargine",
+"insulin glulisine",
+"intermediate-acting human insulin",
+"rapid-acting human insulin",
+"isophane insulin",
+"rapid-acting insulin lispro",
+"intermediate-acting insulin lispro 50:50",
+"intermediate-acting insulin lispro 25:75",
+"interferon alpha",
+"interferon alpha-2b",
+"human interferon beta",
+"ipratropium",
+"ipratropium + salbutamol",
+"irbesartan",
+"irbesartan + hydrochlorothiazide",
+"irbesartan + hydrochlorothiazide (300/25) mg",
+"irbesartan + hydrochlorothiazide (150/12.5) mg",
+"isavuconazole",
+"isoniazid",
+"isoniazid + pyridoxine",
+"isonixine",
+"isosorbide",
+"isosorbide dinitrate",
+"isosorbide mononitrate",
+"itraconazole",
+"ivabradine",
+"ixekizumab",
+"josamycin",
+"ketazolam",
+"ketoprofen",
+"ketorolac",
+"labetalol",
+"lacidipine",
+"lamivudine",
+"ledipasvir + sofosbuvir",
+"leflunomide",
+"lenalidomide",
+"lenograstim",
+"lercanidipine",
+"lercanidipine + enalapril",
+"letrozole",
+"leuprorelin",
+"levocabastine",
+"levodropropizina",
+"levofloxacin",
+"levomepromazine",
+"linagliptina",
+"linagliptina + metformina",
+"lincomicina",
+"linezolid",
+"lipoproteina recombinante fhbp de neisseria meningitidis del serogrupo b subfamilia a + subfamilia b",
+"liraglutida",
+"lisdexanfetamina",
+"lisinopril",
+"lisinopril + hidroclorotiazida",
+"litio",
+"lixisenatida",
+"lomustina",
+"loprazolam",
+"loratadina + pseudoefedrina",
+"lorazepam",
+"lormetazepam",
+"lornoxicam",
+"losartan",
+"losartan + hidroclorotiazida 50/12,5",
+"losartan + hidroclorotiazida 100/12,5",
+"losartan + hidroclorotiazida 100/25",
+"loxapina",
+"lurasidona",
+"macitentan",
+"manidipino",
+"maprotilina",
+"maraviroc",
+"medroxiprogesterona",
+"mefenamic acid",
+"megestrol",
+"meglumine",
+"melatonin",
+"melitracen + flupentixol",
+"meloxicam",
+"memantina",
+"meningococcal b vaccine",
+"mepiramine",
+"mepolizumab",
+"mercaptopurine",
+"meropenem",
+"mesna",
+"metamizole",
+"metformin",
+"metformin + dapagliflozin",
+"metformin + empagliflozin",
+"metformin + pioglitazone",
+"metformin + sitagliptin",
+"metformin + vildagliptin",
+"methyldopa",
+"methylphenidate",
+"methylprednisolone",
+"metoprolol",
+"metoprolol + felodipine",
+"methotrexate",
+"metronidazole",
+"mexiletine",
+"mirtazapine",
+"mycophenolic acid",
+"midazolam",
+"midecamycin",
+"midodrine",
+"minocycline",
+"minoxidil",
+"mirtazapine",
+"mitomycin",
+"mitotane",
+"moclobemide",
+"modafinil",
+"molsidomine",
+"mometasone",
+"montelukast",
+"morphine",
+"morphine hydrochloride",
+"moxifloxacin",
+"moxonidine",
+"nabumetone",
+"nadolol",
+"nadroparin",
+"naphazoline",
+"naftidrofuryl",
+"naproxen",
+"naproxen + esomeprazole",
+"naratriptan",
+"natalizumab",
+"nebivolol",
+"nebivolol + hydrochlorothiazide",
+"nedocromil",
+"nevirapine",
+"nicardipine",
+"nicergoline",
+"methyl nicotinate",
+"nifedipine",
+"niflumic acid",
+"nifurtimox",
+"nimodipine",
+"niraparib",
+"nisoldipine",
+"nitrendipine",
+"nitrofurantoin",
+"nitroglycerin",
+"nitroglycerin + caffeine",
+"norfloxacin",
+"nortriptyline",
+"nortriptyline + diazepam",
+"noscapine",
+"ocrelizumab",
+"ofloxacin",
+"olanzapine",
+"olaparib",
+"olmesartan",
+"olmesartan + amlodipine",
+"olmesartan + amlodipine + hydrochlorothiazide",
+"olmesartan + hydrochlorothiazide",
+"olodaterol",
+"olodaterol + tiotropium bromide",
+"omalizumab",
+"ombitasvir + paritaprevir + ritonavir",
+"orlistat",
+"oseltamivir",
+"oxycodone",
+"oxycodone + naloxone",
+"oxymetazoline",
+"oxymetazoline + menthol",
+"paliperidone",
+"paracetamol",
+"paracetamol + acetylcysteine",
+"paracetamol + ascorbic acid",
+"paracetamol + caffeine",
+"paracetamol + caffeine + brompheniramine",
+"paracetamol + caffeine + dimenhydrinate",
+"paracetamol + chlorphenamine + dextromethorphan + ascorbic acid + caffeine",
+"paracetamol + codeine",
+"paracetamol + codeine + ascorbic acid",
+"paracetamol + codeine + caffeine",
+"paracetamol + phenylephrine + chlorphenamine",
+"paracetamol + propyphenazone + caffeine",
+"paracetamol + tramadol",
+"paroxetine",
+"pegfilgrastim",
+"peginterferon alfa-2a",
+"peginterferon beta-1a",
+"penicillamine",
+"pentoxifylline",
+"perphenazine",
+"perphenazine + amitriptyline",
+"periciazine",
+"perindopril",
+"perindopril + amlodipine",
+"perindopril + amlodipine + indapamide",
+"perindopril + indapamide",
+"pethidine",
+"pimozide",
+"pinazepam",
+"pioglitazone (d.c.i.-r)",
+"pioglitazone + glimepiride",
+"pipemidic acid",
+"piracetam",
+"pyrazinamide",
+"pirfenidone",
+"pyrimethamine",
+"pirisudanol",
+"piroxicam",
+"pneumococcal capsular polysaccharides",
+"pneumococcal capsular polysaccharides serotypes 4,6B,9V,14,19F,23F + oligosaccharide 18C",
+"pneumococcal polysaccharides serotypes 1,2,3,4,5,6B,7F,8,9N,9V,10A,11A,12F,14,15B,17F,18C,19A,19F,20,22F,23F,33F",
+"pomalidomide",
+"posaconazole",
+"prasugrel",
+"prazosin",
+"prednisolone",
+"prednisone",
+"corticosteroid nasal preparations",
+"propafenone",
+"propranolol",
+"human plasma protein",
+"plasma proteins",
+"pseudoephedrine",
+"pseudoephedrine + dexbrompheniramine",
+"quazepam",
+"quetiapine",
+"quinapril",
+"quinapril + hydrochlorothiazide",
+"raltegravir",
+"ramipril",
+"ramipril + hydrochlorothiazide",
+"ranitidine",
+"ranolazine",
+"reboxetine",
+"repaglinide",
+"reslizumab",
+"retinol",
+"rh dnase",
+"ribavirin",
+"rifabutin",
+"rifampicin",
+"rifampicin + isoniazid",
+"rifampicin + isoniazid + pyrazinamide",
+"rilpivirine",
+"riociguat",
+"risankizumab",
+"risperidone",
+"ritonavir",
+"ritonavir + lopinavir",
+"rivaroxaban",
+"rivastigmine",
+"rizatriptan",
+"roflumilast",
+"rotavirus",
+"roxithromycin",
+"sacubitril + valsartan",
+"salbutamol",
+"salbutamol + beclometasone",
+"salmeterol",
+"salmeterol + fluticasone (25/50)",
+"salmeterol + fluticasone (12,75/100)",
+"salmeterol + fluticasone (12,75/202)",
+"salmeterol + fluticasone (25/125)",
+"salmeterol + fluticasone (25/250)",
+"salmeterol + fluticasone (50/100)",
+"salmeterol + fluticasone (50/250)",
+"salmeterol + fluticasone (50/500)",
+"salmonella typhi inactivated + salmonella typhi live",
+"sarilumab",
+"saxagliptin",
+"saxagliptin + metformin",
+"secukinumab",
+"selexipag",
+"semaglutide",
+"sertindole",
+"sertraline",
+"siponimod",
+"sirolimus",
+"sitagliptin",
+"sobrerol",
+"sodium chloride",
+"sofosbuvir",
+"sotalol",
+"sulfadiazine",
+"sulfamethizole + phenazopyridine",
+"sulfamethoxazole + sulfoguaiacol + trimethoprim",
+"sulodexide",
+"sulpiride",
+"sulpiride + diazepam",
+"sulpiride + diazepam + pyridoxine",
+"sumatriptan",
+"tacrolimus",
+"thalidomide",
+"tamoxifen",
+"tapentadol",
+"tegafur",
+"telbivudine",
+"telithromycin",
+"telmisartan",
+"telmisartan + amlodipine",
+"telmisartan + hydrochlorothiazide",
+"temozolomide",
+"tenofovir",
+"tenofovir (TAF) + bictegravir + emtricitabine",
+"tenofovir + emtricitabine",
+"tenoxicam",
+"theophylline",
+"terbutaline",
+"terbutaline + guaifenesin",
+"teriflunomide",
+"tianeptine",
+"tiapride",
+"ticagrelor",
+"ticlopidine",
+"tildrakizumab",
+"tinidazole",
+"tinzaparin",
+"tobramycin",
+"tocilizumab",
+"tofacitinib",
+"tolvaptan",
+"torasemide",
+"diphtheria toxoid + tetanus toxoid",
+"tetanus toxoid + meningococcal polysaccharide antigen group C",
+"tramadol",
+"tramazoline",
+"trandolapril",
+"trandolapril + verapamil",
+"trazodone",
+"treprostinil",
+"tretinoin",
+"triamcinolone",
+"triamcinolone acetonide",
+"triazolam",
+"trifluridine + tipiracil",
+"triflusal",
+"trimetazidine",
+"trimethoprim",
+"trimethoprim + sulfamethoxazole + bromhexine + tolu balsam",
+"trimipramine",
+"triptorelin",
+"ubidecarenone",
+"umeclidinium",
+"upadacitinib",
+"urea",
+"urokinase",
+"ustekinumab",
+"valacyclovir",
+"valerian",
+"valganciclovir",
+"valsartan",
+"valsartan + amlodipine",
+"valsartan + amlodipine + hydrochlorothiazide",
+"valsartan + hydrochlorothiazide",
+"vancomycin",
+"vedolizumab",
+"velpatasvir + sofosbuvir",
+"venetoclax",
+"venlafaxine",
+"verapamil",
+"vibrio cholerae + recombinant cholera toxin",
+"vilanterol + fluticasone",
+"vilanterol + umeclidinium",
+"vilanterol + umeclidinium + fluticasone",
+"vildagliptin",
+"vincamine + piracetam",
+"vinorelbine",
+"vinpocetine",
+"inactivated Japanese encephalitis virus strain SA 14-2",
+"yellow fever virus strain 17D",
+"inactivated enteric influenza virus",
+"split influenza virus",
+"recombinant adjuvanted human papillomavirus (types 16 and 18)",
+"human papillomavirus (types 6, 11, 16, 18)",
+"human papillomavirus (types 6, 45, 18, 52, 16, 11, 58, 31, 33)",
+"human papillomavirus type 16 L1 protein",
+"rabies virus",
+"measles + mumps + rubella virus",
+"live attenuated varicella-zoster virus",
+"vismodegib",
+"voriconazole",
+"vortioxetine",
+"voxilaprevir + sofosbuvir + velpatasvir",
+"warfarin",
+"xylometazoline + ipratropium",
+"xipamide",
+"dry ivy extract",
+"zafirlukast",
+"zanamivir",
+"zidovudine",
+"zidovudine + lamivudine",
+"ziprasidone",
+"zolmitriptan",
+"zolpidem",
+"zopiclone",
+"zuclopenthixol"
+  ))
+
+```
+
+```{r}
+# check names----------------------------------------------------------------
+gaia_act_desc_english |> gt()
+# ok
+
+```
+
+## Add form_name
+
+```{r}
+# translate to english forms-------------------------------------------------
+gaia_forms <- gaia_clinical_drugs2 |> 
+  distinct(forma) |> arrange(forma) 
+
+gaia_forms |> pull(forma)
+
+gaia_forms_english <- gaia_forms |> 
+  mutate(form = c(
+    # "AEROSOL"
+    "aerosol",
+    # "AMPOLLA"
+    "ampoule",
+    # "AMPOLLAS"
+    "ampoule",
+    # "BOLSAS"
+    "bags",
+    # "CAPSULAS"
+    "capsule",
+    # "CAPSULAS LIBERACION RETARDADA"
+    "capsule",
+    # "CARAMELOS"
+    "candies",
+    # "CARTUCHO"
+    "cartridge",
+    # "CARTUCHO/PLUMA"
+    "cartridge/pen",
+    # "COMPRIMIDO"
+    "tablet",
+    # "COMPRIMIDOS"
+    "tablet",
+    # "COMPRIMIDOS RECUBIERTOS"
+    "tablet",
+    # "COMPRIMIDOS SUBLINGUALES"
+    "sublingual tablet",
+    # "COMPRIMIDOS/TABLETAS"
+    "tablet",
+    # "CONCENTRADO"
+    "concentrate",
+    # "CREMA"
+    "cream",
+    # "DOSIS"
+    "dose",
+    # "EMULSION"
+    "emulsion",
+    # "ENEMA"
+    "enema",
+    # "EXTRACTO"
+    "extract",
+    # "FRASCO"
+    "bottle",
+    # "FRASCOS"
+    "bottle",
+    # "FRASCOS/BOLSAS"
+    "bottle",
+    # "GEL"
+    "gel",
+    # "GOTAS"
+    "drops",
+    # "GOTAS NASALES"
+    "nasal drops",
+    # "GRAGEAS"
+    "coated tablets",
+    # "GRANULADO PARA SUSPENSION ORAL"
+    "granules for oral suspension",
+    # "INHALACIONES"
+    "inhalation",
+    # "INHALACIÓN"
+    "inhalation",
+    # "INHALADOR"
+    "inhaler",
+    # "INYECTABLE"
+    "injectable",
+    # "INYECTABLES"
+    "injectable",
+    # "JARABE"
+    "syrup",
+    # "JERINGA"
+    "syringe",
+    # "JERINGA/PLUMA"
+    "syringe",
+    # "LIOTABS"
+    "liotab",
+    # "MONODOSIS"
+    "unit dose",
+    # "NEBULIZACION"
+    "nebulization",
+    # "NEBULIZACION/INHALACION"
+    "nebulization",
+    # "NEBULIZADOR"
+    "nebulizer",
+    # "ORAL"
+    "oral suspension",
+    # "PARA"
+    "solution",
+    # "PARCHE"
+    "patch",
+    # "PARCHE TRANSDERMICO"
+    "transdermal patch",
+    # "PARCHES"
+    "patch",
+    # "PASTILLAS"
+    "pills",
+    # "PELICULAS"
+    "films",
+    # "PLUMA"
+    "pen",
+    # "PLUMA PREGARGADA"
+    "pre-filled pen",
+    # "PLUMAS"
+    "pen",
+    # "POLVO"
+    "powder",
+    # "POMADA"
+    "ointment",
+    # "PULSACIONES"
+    "pulses",
+    # "PULVERIZACIONES"
+    "sprays",
+    # "PULVERIZADOR"
+    "sprayer",
+    # "SOBRE"
+    "sachet",
+    # "SOBRES"
+    "sachet",
+    # "SOL"
+    "solution",
+    # "SOL ORAL"
+    "solution",
+    # "SOLUCION"
+    "solution",
+    # "SOLUCION GOTAS"
+    "solution",
+    # "SOLUCION PARA PULVERIZACION NASAL"
+    "solution",
+    # "SPRAY"
+    "spray",
+    # "SPRAY NASAL"
+    "spray",
+    # "SUPOSITORIOS"
+    "suppositories",
+    # "SUSP"
+    "suspension",
+    # "SUSPENSION"
+    "suspension",
+    # "TABLETAS"
+    "tablets",
+    # "VIAL"
+    "vial",
+    # "VIAL + JERINGA"
+    "vial + syringe"
+))
+
+```
+
+```{r}
+# add english descriptions---------------------------------------------------
+gaia_clinical_drugs3 <- gaia_clinical_drugs2 |> 
+  left_join(gaia_act_desc_english) |> 
+  left_join(gaia_forms_english)
+
+```
+
+# Fix via_desc
+
+In the variable *via_desc*, there is one category called "OTRAS VIAS". We will specify what route they are referring to. Particularly, there are two drug forms: a transdermal patch and a subcutaneous injection. 
+
+```{r}
+# update via_desc recoding "OTRAS VIAS" Category-----------------------------
+gaia_clinical_drugs3 |> distinct(via_desc) |> arrange(via_desc)
+gaia_clinical_drugs3 |> filter(via_desc == "OTRAS VIAS")
+gaia_clinical_drugs3 |> filter(pres_farma_cod %in% c(10281, 10812))
+gaia_clinical_drugs4 <- gaia_clinical_drugs3 |> mutate(
+  via_desc = case_when(
+    pres_farma_cod == "10281" ~ "TRANSDERMAL",
+    pres_farma_cod == "10812" ~ "SUBCUTANEA",
+    T ~ via_desc))
+    
+```
+
+# Group pres_farma_cod
+
+The *pres_farma_cod* should be unique, so we merge two categories that have two different, albeit similar, descriptions.
+
+```{r}
+# group repeated pres_farma_cod----------------------------------------------
+gaia_clinical_drugs4 |> add_count(pres_farma_cod) |> 
+  filter(n > 1)
+
+gaia_clinical_drugs5 <- gaia_clinical_drugs4 |> 
+  group_by(pres_farma_cod) |> 
+  summarise_all(dplyr::first)
+
+```
+
+# Save gaia
+
+```{r}
+# save master----------------------------------------------------------------
+fwrite(gaia_clinical_drugs5, file.path("Resultados", "gaia_masters",
+                                      "gaia_clinical_drugs5.csv"))
+
+```
+
+# Create file to use with usagi
+
+```{r}
+# create and save usagi_gaia-------------------------------------------------
+usagi_gaia <- gaia_clinical_drugs5 |> 
+  count(pres_farma_cod, pres_farma_desc)
+
+usagi_gaia_sin_barra <- gaia_clinical_drugs5 |> 
+  count(pres_farma_cod, pres_farma_desc) |> 
+  mutate(pres_farma_desc = str_remove_all(pres_farma_desc, "/"))
+
+
+fwrite(usagi_gaia, file.path("Resultados", "gaia_masters", "usagi",
+                                      "usagi_gaia.csv"))
+fwrite(usagi_gaia_sin_barra, file.path("Resultados", "gaia_masters", "usagi",
+                                      "usagi_gaia_sin_barra.csv"))
+
+```
+
+
+
+
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_07_5_GAIA_Standard_Concepts_CONSIGN.qmd"))
+file.copy(from = file.path("1_07_5_GAIA_Standard_Concepts_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

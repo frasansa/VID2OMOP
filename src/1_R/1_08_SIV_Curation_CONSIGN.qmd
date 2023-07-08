@@ -1,0 +1,398 @@
+---
+title: "CONSIGN: SIV Curation"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+```{r}
+# load siv-------------------------------------------------------------------
+siv_00 <- fread(file.path(path_origenes_consign, 
+            "08_SIV", "ext2", "V99", 
+            "SD2270_SIV.enc.txt")) |> 
+  # cambiar a minúsculas  
+  clean_names("snake")  
+
+```
+
+# SIV
+
+```{r}
+# fix base-------------------------------------------------------------------
+siv <- siv_00 |>
+  mutate(
+    fecha_vacuna = ymd(fecha_vacuna)
+      ) |> 
+  distinct()
+
+```
+
+```{r}
+siv_clinical_drugs <- siv |> 
+  distinct(tipo_vacuna, nombre_vacuna) |> 
+  arrange(tipo_vacuna, nombre_vacuna)
+
+```
+
+# save base
+
+```{r}
+# write table------------------------------------------------------------------
+fwrite(siv, append = FALSE, file = file.path("Origin_tables", "siv.csv"))
+fwrite(siv_clinical_drugs, append = FALSE, file = file.path("Resultados",
+                               "gaia_masters", "siv_clinical_drugs.csv"))
+
+```
+
+# Standardize siv_clinical_drugs
+
+## Translate to english tipo_vacuna
+
+```{r}
+# translate to english the types of vaccines---------------------------------
+# distinct source "tipo_vacuna
+siv_clinical_drugs_tipo <- siv_clinical_drugs |>
+  distinct(tipo_vacuna) |> 
+  arrange(tipo_vacuna)
+
+siv_clinical_drugs_tipo_english <- siv_clinical_drugs_tipo |> 
+  mutate(vaccine_type = c(
+    # BCG,
+    "BCG",
+    # COLERA",
+    "Cholera",
+    # COV-2",
+    "COV-2",
+    # DIF",
+    "DIF",
+    # DT",
+    "DT",
+    # DTP",
+    "DTP",
+    # DTPA",
+    "DTPA",
+    # DTPAHI",
+    "DTPAHI",
+    # DTPHB",
+    "DTPHB",
+    # DTPHIB",
+    "DTPHIB",
+    # EJA",
+    "Japonese encephalitis",
+    # ENCENE",
+    "Centroeuropean encephalitis",
+    # FA",
+    "Yellow fever",
+    # GRIPE",
+    "FLU",
+    # HA",
+    "HA",
+    # HA+B",
+    "HA+B",
+    # HABP",
+    "HAP",
+    # HAD",
+    "HAD",
+    # HAP",
+    "HAP",
+    # HB40",
+    "HB40",
+    # HBA",
+    "HBA",
+    # HBP",
+    "HBP",
+    # HEXA",
+    "HEXA",
+    # HIB",
+    "Hib",
+    # MAC",
+    "MAC",
+    # MACYW",
+    "MACYW",
+    # MACYWC",
+    "MACYWC",
+    # MB",
+    "MB",
+    # MC",
+    "MC",
+    # NEU",
+    "NEU",
+    # NEUC10",
+    "NEUC10",
+    # NEUC13",
+    "NEUC13",
+    # OSE",
+    "OSE",
+    # PAR",
+    "PAR",
+    # PENTA",
+    "PENTA",
+    # POLIO",
+    "Polio",
+    # POL_IN",
+    "Polio",
+    # RAB",
+    "RAB",
+    # ROTAV",
+    "ROTAV",
+    # RUB",
+    "RUB",
+    # SAR",
+    "SAR",
+    # SARRUB",
+    "SARRUB",
+    # T",
+    "T",
+    # TD",
+    "TD",
+    # TDPA",
+    "TDPA",
+    # TIFI",
+    "TIFI",
+    # TIFO",
+    "TIFO",
+    # TV",
+    "TV",
+    # TV+VAR",
+    "TV+VAR",
+    # TVAH",
+    "TVAH",
+    # VARIC",
+    "Varicella",
+    # VPH",
+    "HPV",
+    # ZOSTER",
+    "Zoster"
+  ))
+  
+```
+
+## relation with ATC concept id
+
+```{r}
+# load concepts vocabulary---------------------------------------------------
+concepts_vocabulary <- fread(file.path("..", "EHDEN",  "Vocabularies2", 
+                                       "CONCEPT.csv"))
+concepts_relationship <- fread(file.path("..", "EHDEN",  "Vocabularies2", 
+                                         "CONCEPT_RELATIONSHIP.csv"))
+concepts_ancestor <- fread(file.path("..", "EHDEN",  "Vocabularies2", 
+                                     "CONCEPT_ANCESTOR.csv"))
+
+```
+
+
+```{r}
+# list atc_vaccines concept names--------------------------------------------
+siv_type <- siv_clinical_drugs_tipo_english |> 
+  distinct(vaccine_type) |> 
+  arrange(vaccine_type)
+
+siv_types <- siv_clinical_drugs_tipo_english |> 
+  distinct(vaccine_type) |> 
+  arrange(vaccine_type) |> pull(vaccine_type)
+
+cvx_vaccines <- concepts_vocabulary |> 
+  filter(domain_id == "Drug") |> 
+  filter(str_detect(concept_name, "vaccine")) |> 
+  filter(concept_class_id == "Vaccine Group") |>
+  filter(standard_concept == "S") |> 
+  arrange(concept_name) |> union(
+    concepts_vocabulary |> 
+      filter(concept_name == "Human Papillomavirus 9-valent vaccine")
+  )
+
+```
+
+```{r}
+# check tipo_vacuna and nombre_vacuna----------------------------------------
+siv_clinical_drugs |> arrange(tipo_vacuna, nombre_vacuna)
+
+```
+
+```{r}
+# link tipo_vacuna with cvx concept_name-------------------------------------
+siv_type_cvx <- siv_clinical_drugs_tipo |> 
+  mutate(cvx_concept_name = c(
+  # BCG,
+  "Bacillus Calmette-Guerin vaccine",
+  # COLERA",
+  "cholera vaccine, unspecified formulation",
+  # COV-2",
+  "SARS-COV-2 (COVID-19) vaccine, UNSPECIFIED",
+  # DIF",
+  "diphtheria, tetanus toxoids and acellular pertussis vaccine, unspecified formulation",
+  # DT",
+  "diphtheria, tetanus toxoids and acellular pertussis vaccine, unspecified formulation",
+  # DTP",
+  "diphtheria, tetanus toxoids and acellular pertussis vaccine, unspecified formulation",
+  # DTPA",
+  "diphtheria, tetanus toxoids and acellular pertussis vaccine, unspecified formulation",
+  # DTPAHI",
+  "diphtheria, tetanus toxoids and acellular pertussis vaccine, unspecified formulation",
+  # DTPHB",
+  "diphtheria, tetanus toxoids and acellular pertussis vaccine, unspecified formulation",
+  # DTPHIB",
+  "diphtheria, tetanus toxoids and acellular pertussis vaccine, unspecified formulation",
+  # EJA",
+  "Japanese Encephalitis vaccine, unspecified formulation",
+  # ENCENE",
+  "Tick-borne encephalitis vaccine, unspecified",
+  # FA",
+  "Yellow fever vaccine, unspecified formulation",
+  # GRIPE",
+  "influenza virus vaccine, unspecified formulation",
+  # HA",
+  "hepatitis A vaccine, unspecified formulation",
+  # HA+B",
+  "hepatitis A vaccine, unspecified formulation",
+  # HABP",
+  "hepatitis A vaccine, unspecified formulation",
+  # HAD",
+  "hepatitis A vaccine, unspecified formulation",
+  # HAP",
+  "hepatitis A vaccine, unspecified formulation",
+  # HB40",
+  "hepatitis B vaccine, unspecified formulation",
+  # HBA",
+  "hepatitis B vaccine, unspecified formulation",
+  # HBP",
+  "hepatitis B vaccine, unspecified formulation",
+  # HEXA",
+  "hepatitis B vaccine, unspecified formulation",
+  # HIB",
+  "Haemophilus influenzae type b vaccine, conjugate unspecified formulation",
+  # MAC",
+  "meningococcal ACWY vaccine, unspecified formulation",
+  # MACYW",
+  "meningococcal ACWY vaccine, unspecified formulation",
+  # MACYWC",
+  "meningococcal ACWY vaccine, unspecified formulation",
+  # MB",
+  "meningococcal ACWY vaccine, unspecified formulation",
+  # MC",
+  "meningococcal ACWY vaccine, unspecified formulation",
+  # NEU",
+  "pneumococcal polysaccharide vaccine, 23 valent",
+  # NEUC10",
+  "pneumococcal polysaccharide vaccine, 23 valent",
+  # NEUC13",
+  "pneumococcal polysaccharide vaccine, 23 valent",
+  # OSE", # comprobar el caso. Se le puso a los 12 años
+  "meningococcal ACWY vaccine, unspecified formulation",
+  # PAR",
+  "measles, mumps and rubella virus vaccine",
+  # PENTA",
+  "diphtheria, tetanus toxoids and acellular pertussis vaccine, unspecified formulation",
+  # POLIO",
+  "poliovirus vaccine, unspecified formulation",
+  # POL_IN",
+  "poliovirus vaccine, unspecified formulation",
+  # RAB",
+  "rabies vaccine, unspecified formulation",
+  # ROTAV",
+  "rotavirus vaccine, unspecified formulation	",
+  # RUB",
+  "measles, mumps and rubella virus vaccine",
+  # SAR",
+  "measles, mumps and rubella virus vaccine",
+  # SARRUB",
+  "measles, mumps and rubella virus vaccine",
+  # T",
+  "tetanus toxoid, reduced diphtheria toxoid, and acellular pertussis vaccine, adsorbed",
+  # TD",
+  "tetanus toxoid, reduced diphtheria toxoid, and acellular pertussis vaccine, adsorbed",
+  # TDPA",
+  "tetanus toxoid, reduced diphtheria toxoid, and acellular pertussis vaccine, adsorbed",
+  # TIFI",
+  "typhoid vaccine, unspecified formulation",
+  # TIFO",
+  "typhoid vaccine, unspecified formulation",
+  # TV",
+  "measles, mumps and rubella virus vaccine",
+  # TV+VAR",
+  "measles, mumps and rubella virus vaccine",
+  # TVAH",
+  "measles, mumps and rubella virus vaccine",
+  # VARIC",
+  "varicella virus vaccine",
+  # VPH",
+  "Human Papillomavirus 9-valent vaccine",
+  # ZOSTER",
+  "zoster vaccine, unspecified formulation"
+  ))
+
+```
+
+```{r}
+# add english name and atc concept_name--------------------------------------
+siv_clinical_drugs2 <- siv_clinical_drugs |> 
+  left_join(siv_clinical_drugs_tipo_english, by = "tipo_vacuna") |> 
+  left_join(siv_type_cvx, by = "tipo_vacuna") 
+  
+```
+
+
+```{r}
+# save table-----------------------------------------------------------------
+fwrite(siv_clinical_drugs2, append = FALSE, file = file.path("Resultados",
+                               "gaia_masters", "siv_clinical_drugs2.csv"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_08_1_SIV_Curation_CONSIGN.qmd"))
+file.copy(from = file.path("1_08_1_SIV_Curation_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

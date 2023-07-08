@@ -1,0 +1,275 @@
+---
+title: "CONSIGN: GAIA Curation. Part III"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes-----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+```{r}
+# pres
+pres_v4 <- fread(file.path("Origin_tables", "auxiliar", 
+                                   "pres_v4.csv"))
+# disp
+disp_v3 <- fread(file.path("Origin_tables", "auxiliar", 
+                                   "disp_v3.csv"))
+# tx
+tx_v3_cleaned <- fread(file.path("Origin_tables", "auxiliar", 
+                         "tx_v3_cleaned.csv"))
+
+
+# maestros
+maestro_atc <- fread(file.path("Origin_tables", "auxiliar", 
+                                     "maestro_atc.csv"))
+
+maestro_prin_act <- fread(file.path("Origin_tables", "auxiliar", 
+                                     "maestro_prin_act.csv"))
+
+maestro_pres_farma <- fread(file.path("Origin_tables", "auxiliar", 
+                                     "maestro_pres_farma.csv"))
+
+maestro_via <- fread(file.path("Origin_tables", "auxiliar", 
+                                     "maestro_via.csv"))
+
+```
+
+# Join bases
+
+```{r}
+# join bases-----------------------------------------------------------------
+pres_disp_v3 <- pres_v4 |> 
+  tidylog::full_join(disp_v3, by = c(num_receta = "num_receta")) |> 
+  mutate(fecha_prescr = dmy(fecha_prescr),
+         fecha_disp = dmy(fecha_disp)) |> 
+  filter(fecha_prescr >= ymd("20180101") | fecha_disp >= ymd("20180101"),
+         fecha_prescr < ymd("20220101") | fecha_disp < ymd("20220101"))
+  
+rm(pres_v4, disp_v3)
+
+```
+
+
+```{r}
+# join bases-----------------------------------------------------------------
+gaia_raw_v3 <- pres_disp_v3 |> 
+  tidylog::left_join(tx_v3_cleaned, by = c("clave_trat" = "clv_trat"))
+  
+fwrite(gaia_raw_v3, file.path("Origin_tables", "auxiliar", "gaia_raw_v3.csv"))
+
+rm(pres_disp_v3, tx_v3_cleaned)
+
+```
+
+# Fix base and remove duplicates
+
+```{r}
+# fix raw no pres------------------------------------------------------------
+gaia_v3_no_pres <- gaia_raw_v3 |> 
+  filter(is.na(fecha_prescr)) |> 
+  select(
+    sip = num_sip.y,
+    id_receta = num_receta,
+    id_trat = clave_trat,
+    f_pres = fecha_prescr,
+    f_disp = fecha_disp,
+    atc_cod = cod_prin_atc.y,
+    # atc_desc = prin_atc,
+    prin_act_cod = cod_prin_act.y,
+    # prin_act_desc = prin_act,
+    pres_farma_cod = cod_pres_farm.y,
+    # pres_farma_desc = pres_farma,
+    via_cod = cod_via.y,
+    # via_desc = via,
+    precio = importe,
+    estado_receta = estado_rec,
+    reg_receta = regimen_rec.y,
+    receta_abucasis = receta_abuc,
+    unidades = unidades,
+    cadencia = cadencia,
+    estado_trat = estado_trat,
+    fecha_ini_trat_pres = fecha_ini_trat,
+    fecha_ini_trat = fecha_ini,
+    fecha_fin_trat = fecha_fin,
+    diag_cod = diag_cod,
+    env_durac = env_durac) |> 
+  left_join(maestro_atc) |> 
+  left_join(maestro_prin_act) |> 
+  left_join(maestro_pres_farma) |> 
+  left_join(maestro_via) 
+    
+# Iterative process: the masters are added here but are generated below
+
+```
+
+
+```{r}
+# check duplicates-----------------------------------------------------------
+gaia_tagged_v3 <- gaia_raw_v3 |>
+  filter(!is.na(fecha_prescr)) |> 
+  select(
+    sip = num_sip.x,
+    id_receta = num_receta,
+    id_trat = clave_trat,
+    f_pres = fecha_prescr,
+    f_disp = fecha_disp,
+    atc_cod = cod_prin_atc.x,
+    atc_desc = prin_atc,
+    prin_act_cod = cod_prin_act.x,
+    prin_act_desc = prin_act,
+    pres_farma_cod = cod_pres_farm.x,
+    pres_farma_desc = pres_farma,
+    via_cod = cod_via.x,
+    via_desc = via,
+    precio = importe,
+    estado_receta = estado_rec,
+    reg_receta = regimen_rec.x,
+    receta_abucasis = receta_abuc,
+    unidades = unidades,
+    cadencia = cadencia,
+    estado_trat = estado_trat,
+    fecha_ini_trat_pres = fecha_ini_trat,
+    fecha_ini_trat = fecha_ini,
+    fecha_fin_trat = fecha_fin,
+    diag_cod = diag_cod,
+    env_durac = env_durac) |> 
+  add_count(id_receta, name = "n_id_receta")
+
+```
+
+
+```{r}
+# group duplicated prescriptions---------------------------------------------
+gaia_v3_rep <- gaia_tagged_v3 |> 
+  filter(n_id_receta > 1) |> 
+  select(-n_id_receta) |> 
+  group_by(id_receta) |> 
+  summarise(across(.fns = ~dplyr::first(na.omit(.))))
+
+# create base without duplicates---------------------------------------------
+gaia_v3_cleaned <- gaia_tagged_v3 |> 
+  # unique prescriptions
+  filter(n_id_receta == 1) |>
+  select(-n_id_receta) |> 
+  # grouped prescriptions
+  bind_rows(gaia_v3_rep) |>
+  bind_rows(gaia_v3_no_pres) |> 
+  mutate(fecha_ini_trat_pres = dmy(fecha_ini_trat_pres),
+         fecha_ini_trat = dmy(fecha_ini_trat),
+         fecha_fin_trat = dmy(fecha_fin_trat))
+
+```
+
+# Obtain masters
+
+```{r}
+# obtain atc master----------------------------------------------------------
+maestro_atc <- gaia_v3_cleaned |> 
+  distinct(atc_cod, atc_desc) 
+
+fwrite(maestro_atc, file.path("Origin_tables", "auxiliar", "maestro_atc.csv"))
+
+```
+
+```{r}
+# obtain prin_act master-----------------------------------------------------
+maestro_prin_act <- gaia_v3_cleaned |> 
+  distinct(prin_act_cod, prin_act_desc) 
+
+fwrite(maestro_prin_act, file.path("Origin_tables", "auxiliar", 
+                                   "maestro_prin_act.csv"))
+
+```
+
+```{r}
+# obtain pres_farma master---------------------------------------------------
+maestro_pres_farma <- gaia_v3_cleaned |> 
+  distinct(pres_farma_cod, pres_farma_desc) 
+
+fwrite(maestro_pres_farma, file.path("Origin_tables", "auxiliar", 
+                                     "maestro_pres_farma.csv"))
+
+```
+
+```{r}
+# obtener via (route) master-------------------------------------------------
+maestro_via <- gaia_v3_cleaned |> 
+  distinct(via_cod, via_desc) 
+
+fwrite(maestro_via, file.path("Origin_tables", "auxiliar", 
+                                     "maestro_via.csv"))
+
+```
+
+```{r}
+gaia_v3_cleaned |> count(is.na(atc_desc))
+gaia_v3_cleaned |> count(is.na(prin_act_desc))
+gaia_v3_cleaned |> count(is.na(pres_farma_desc))
+gaia_v3_cleaned |> count(is.na(via_desc))
+
+```
+
+# Save base
+
+```{r}
+# save base------------------------------------------------------------------
+fwrite(gaia_v3_cleaned, file.path("Origin_tables", "auxiliar", 
+                                  "gaia_v3_cleaned.csv"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_07_3_GAIA_unir_pres_disp_tx_CONSIGN.qmd"))
+file.copy(from = file.path("1_07_3_GAIA_unir_pres_disp_tx_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

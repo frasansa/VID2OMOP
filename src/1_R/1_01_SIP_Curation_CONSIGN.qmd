@@ -1,0 +1,290 @@
+---
+title: "CONSIGN: SIP Curation"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| include: false
+# load libraries and functions-----------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", "1-DATOS", 
+                                  "3-PROCESADOS")
+
+```
+
+```{r}
+# check names----------------------------------------------------------------
+table_sample <- fread(file.path(path_origenes_consign, "01_SIP", "ext2", "V99",
+            "SD2270_SIP_SPO_4464_CONSIGN_V2_2018_out.enc.txt"),
+               nrows = 100) |> clean_names()
+
+table_sample |> names()
+
+```
+
+The next function clean the names of the datasource and fix the format of the dates variables.
+
+```{r}
+# function to load and rename vars-------------------------------------------
+clean_sip_2018_2021 <- function(x, fecha_calculo){
+  fread(header = TRUE, encoding = "Latin-1", file = x) |> 
+  # change to lower case  
+  clean_names("snake") |>  
+  # remove column v16
+  select(-v16) |>  
+  # rename variables
+  rename(
+    sip = nsip, 
+    fecha_nacimiento = fecha_nacimiento,
+    sexo = sexo,
+    pais_nacimiento =  pais_nacimiento_cod_desc,
+    sit_empadronamiento = empadronamiento_cod_desc,
+    derecho_farmacia = derecho_farmacia,
+    dpto_salud =  dpto_asignacion_cod_desc,
+    zona_salud =  zona_asignacion_cod_desc,
+    fecha_alta =  fecha_alta,
+    fecha_baja =  fecha_baja,
+    causa_baja =  causa_de_baja_cod_desc,
+    fecha_defuncion =  fecha_defuncion,
+    raf_ilimi =  limite_pago_farmacia,
+    raf_ipago =  regimen_farmacia,
+    apsig = apsig
+    # mod_acred = ,
+    # residencia_cod_desc =  ,
+    # centro_cod_desc =  ,
+    # clave_medica =  ,
+    # codigo_postal = ,
+    # nif_profesional = ,
+    # causa_alta
+  ) |> 
+  # fix dates
+  mutate(across(c(
+    fecha_nacimiento,
+    fecha_alta,
+    fecha_baja,
+    fecha_defuncion),
+    dmy)) |> 
+  mutate(fecha_calculo = ymd({{fecha_calculo}}), .after = sip) |>
+  # relocate variables
+  relocate(
+             sip, 
+             fecha_calculo, 
+             fecha_nacimiento, 
+             sexo, 
+             pais_nacimiento, 
+             sit_empadronamiento, 
+             derecho_farmacia, 
+             dpto_salud, 
+             zona_salud,
+             fecha_alta, 
+             fecha_baja, 
+             causa_baja,
+             fecha_defuncion,
+             raf_ilimi,
+             raf_ipago,
+             apsig
+             # mod_acred,
+             # residencia,
+             # centro,
+             # clave_medica,
+             # codigo_postal,
+             # nif_profesional,
+             # causa_alta
+             )
+
+}
+  
+```
+
+```{r}
+# load bases-----------------------------------------------------------------
+sip_2018 <- clean_sip_2018_2021(file.path(path_origenes_consign, 
+                                            "01_SIP", "ext2", "V99",
+            "SD2270_SIP_SPO_4464_CONSIGN_V2_2018_out.enc.txt"),
+            fecha_calculo = "2018-12-31") 
+
+sip_2019 <- clean_sip_2018_2021(file.path(path_origenes_consign, 
+                                            "01_SIP", "ext2", "V99",
+            "SD2270_SIP_SPO_4464_CONSIGN_V2_2019_out.enc.txt"),
+            fecha_calculo = "2019-12-31") 
+
+sip_2020 <- clean_sip_2018_2021(file.path(path_origenes_consign, 
+                                            "01_SIP", "ext2", "V99",
+            "SD2270_SIP_SPO_4464_CONSIGN_V2_2020_out.enc.txt"),
+            fecha_calculo = "2020-12-31") 
+
+sip_2021 <- clean_sip_2018_2021(file.path(path_origenes_consign,  
+                                            "01_SIP", "ext2", "V99",
+            "SD2270_SIP_SPO_4464_CONSIGN_V2_2021_out.enc.txt"),
+            fecha_calculo = "2021-12-31")
+
+```
+
+# Join bases
+
+```{r}
+# Join bases-----------------------------------------------------------------
+sip_2018_2021 <- rbindlist(list(
+  sip_2018,
+  sip_2019,
+  sip_2020,
+  sip_2021
+))
+
+```
+
+# Fix bases with the feedback from the Quality Checks
+
+Note that we are using the *tidylog* variation of *tidyverse* verbs in order to obtain more information about the curation process.
+
+```{r}
+# depure base from QC feedback-----------------------------------------------
+
+# assign to unknown values (0_00, -1, -2, etc.) the NA value
+vector_of_nas <- c("", "0:00", "****", "0:DESCONOCIDA", "-1", "-2")
+
+sip_1 <- sip_2018_2021 |> 
+  # fix sexo
+  tidylog::mutate(sexo = case_when(
+    sexo == "M" ~ "Female",
+    sexo == "H" ~ "Male")) |> 
+  # fix unknown as nas
+  tidylog::mutate(across(c(sit_empadronamiento, derecho_farmacia, dpto_salud,
+                           zona_salud, apsig, causa_baja, raf_ipago), 
+                ~if_else(.x %in% vector_of_nas, NA_character_, .x))) |> 
+  # fix wrong causa_baja (recorded as fecha_baja)
+  tidylog::mutate(fecha_baja = if_else(str_detect(causa_baja, "\\d\\d/"),
+                                          dmy(causa_baja), fecha_baja),
+         causa_baja = if_else(str_detect(causa_baja, "\\d\\d/"),
+                                          NA_character_, causa_baja)) |> 
+  # fix format (save correctly spanish characters: "ñ", "´")
+  tidylog::mutate(pais_nacimiento = enc2utf8(pais_nacimiento),
+                  dpto_salud = enc2utf8(dpto_salud),
+                  zona_salud = enc2utf8(zona_salud)
+                  ) |> 
+  # fix some missing death dates with the deregistration date
+  tidylog::mutate(fecha_defuncion = if_else(str_detect(causa_baja, 
+                          "FALLE") == TRUE & is.na(fecha_defuncion), 
+                          fecha_baja, fecha_defuncion),
+  # replace some erroneous deregistration dates with the death date
+         fecha_baja = pmin(fecha_defuncion, fecha_baja, na.rm = TRUE)) 
+  
+```
+
+```{r}
+# get the better (last and most updated) information about constant vars-----
+sip_variables_fijas <- sip_1 |> 
+  distinct(sip, fecha_nacimiento, fecha_defuncion, pais_nacimiento,
+           fecha_calculo) |> 
+  group_by(sip) |> 
+  slice(which.max(fecha_calculo)) |> 
+  select(-fecha_calculo)
+
+sip <- sip_1 |> 
+  select(-c(fecha_nacimiento, fecha_defuncion, pais_nacimiento)) |> 
+  left_join(sip_variables_fijas) |> 
+  # relocate variables
+  relocate(  sip, 
+             fecha_calculo, 
+             fecha_nacimiento, 
+             sexo, 
+             pais_nacimiento, 
+             sit_empadronamiento, 
+             derecho_farmacia, 
+             dpto_salud, 
+             zona_salud,
+             fecha_alta, 
+             fecha_baja, 
+             causa_baja,
+             fecha_defuncion,
+             raf_ilimi,
+             raf_ipago,
+             apsig
+             # mod_acred,
+             # residencia,
+             # centro,
+             # clave_medica,
+             # codigo_postal,
+             # nif_profesional,
+             # causa_alta
+             )
+
+```
+
+
+```{r}
+# check the updating of constant vars----------------------------------------
+sip |> distinct(sip) |> nrow()
+sip |> distinct(sip, fecha_nacimiento, pais_nacimiento, fecha_defuncion) |>
+  nrow()
+
+```
+
+# Save base
+
+```{r}
+# save base -----------------------------------------------------------------
+# save in SSD
+fwrite(sip, file.path("Origin_tables", "sip.csv"))
+# save in CERES
+fwrite(sip, file.path(procesados, "sip.csv"))
+
+
+```
+
+```{r}
+# save source population-----------------------------------------------------
+sips_consign <- sip |> distinct(sip) |> pull()
+saveRDS(sips_consign, file.path("Resultados", "sips", "sips_consign.RDS"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_01_SIP_curation_CONSIGN.qmd"))
+file.copy(from = file.path("1_01_SIP_curation_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>
+

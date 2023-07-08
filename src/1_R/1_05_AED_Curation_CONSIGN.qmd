@@ -1,0 +1,785 @@
+---
+title: "CONSIGN: AED Curation"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes-----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+```{r}
+# check names----------------------------------------------------------------
+table_sample <- fread(file.path(path_origenes_consign, 
+            "05_AED", "Ext2", "V99",
+            "31692_SD2270_URGENCIAS_18.sql.log.enc.txt"),
+               nrows = 100)  |> clean_names()
+
+table_sample |> names()
+
+```
+
+The next function clean the names of the datasource and fix the format of the dates variables.
+
+```{r}
+# function to load and rename vars-------------------------------------------
+clean_aed_2018_2021 <- function(x, ...){
+  fread(file = x, encoding = "Latin-1", na.strings = "",
+  # read code columns as character    
+  colClasses = list(character = 12:13), 
+  ...) |>
+  # change to lower case  
+  clean_names("snake") |> 
+  # rename variables
+  rename(
+    sip = sip,
+    fecha_registro = momento_reg,
+    fecha_alta = momento_alta,
+    dpto_cod = cod_depart_atenc,
+    centro_cod = cod_centro_atenc,
+    circ_alta_cod = cod_circ_alta,
+    circ_alta_desc = desc_circ_alta,
+    motivo_urg_cod = cod_motivo_urg,
+    motivo_urg_desc = desc_motivo_urg,
+    diag_cod = cie_cod_diag,
+    diag2_cod = cie_cod_diag2,
+    prioridad_cod = cod_prio_manchester,
+    prioridad_desc = desc_prio_manchester
+  ) |> 
+  # fix dates
+   mutate(fecha_registro = dmy(fecha_registro),
+          fecha_alta = dmy(fecha_alta)) |> 
+  # relocate variables
+   relocate(
+     sip,
+     fecha_registro,
+     fecha_alta,
+     dpto_cod,
+     centro_cod,
+     circ_alta_cod,
+     circ_alta_desc,
+     motivo_urg_cod,
+     motivo_urg_desc,
+     diag_cod,
+     diag2_cod,
+     prioridad_cod,
+     prioridad_desc
+   )
+}
+ 
+```
+
+```{r}
+# load bases-----------------------------------------------------------------
+aed_2018 <- clean_aed_2018_2021(file.path(path_origenes_consign, 
+            "05_AED", "ext2", "V99",
+            "31692_SD2270_URGENCIAS_18.sql.log.enc.txt")) 
+
+aed_2019 <- clean_aed_2018_2021(file.path(path_origenes_consign, 
+            "05_AED", "ext2", "V99",
+            "31692_SD2270_URGENCIAS_19.sql.log.enc.txt"))
+
+aed_2020 <- clean_aed_2018_2021(file.path(path_origenes_consign, 
+            "05_AED", "ext2", "V99",
+            "31692_SD2270_URGENCIAS_20.sql.log.enc.txt")) 
+
+aed_2021 <- clean_aed_2018_2021(file.path(path_origenes_consign, 
+            "05_AED", "ext2", "V99",
+            "31692_SD2270_URGENCIAS_21.sql.log.enc.txt")) 
+
+```
+
+# Join bases
+
+```{r}
+# join bases-----------------------------------------------------------------
+aed_0 <- rbindlist(list(
+  aed_2018,
+  aed_2019,
+  aed_2020,
+  aed_2021))
+
+```
+
+```{r}
+# check codes
+aed_0 |> count(diag_cod) |> arrange(desc(n))
+# there is a mixture between ICD9CM and ICD10ES codes
+
+```
+
+# Create tipo_codigo variable
+
+```{r}
+# check duplicates-----------------------------------------------------------
+aed_1 <- aed_0 |>  
+  tidylog::distinct()
+
+```
+
+
+```{r}
+# types of codes--------------------------------------------------------------
+# -1 & -2
+sin_referencia <- c("", "-1", "-2", "-1.0", "-2.0")
+
+# pivot longer all codes
+codigos_aed <- aed_1 |> 
+  pivot_longer(diag_cod:diag2_cod, values_to = "diag_cod") |> 
+  select(diag_cod) |> 
+  distinct()
+
+```
+
+
+```{r}
+# Detect NANDA
+nanda1 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |> 
+  filter(str_detect(diag_cod, "\\.") == FALSE) |> 
+  filter(diag_cod %nin% c("605A", "605B")) |> 
+  filter(nchar(diag_cod) > 3) |> 
+  filter(str_starts(diag_cod, "E") == FALSE) |> 
+  pull(diag_cod)
+nanda2 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_detect(diag_cod, "\\.") == TRUE) |> 
+  filter(str_starts(diag_cod, "000") == TRUE) |> 
+  pull(diag_cod)
+# cie9 without letters 3 digits without point + 605A and 605B
+cie9_1 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |> 
+  filter(nchar(diag_cod) == 3 | diag_cod %in% c("605A", "605B")) |>  
+  filter(str_starts(diag_cod, "\\d") == TRUE) |>
+  filter(str_detect(diag_cod, "\\.") == FALSE) |>  
+  pull(diag_cod)
+# cie9 without letters with point
+cie9_2 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "\\d\\d\\d\\.") == TRUE) |> 
+  pull(diag_cod)
+# cie9 E
+cie9_3 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "E\\d\\d\\d\\.") == TRUE) |> 
+  pull(diag_cod)
+cie9_4 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "E\\d\\d\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 4) |> 
+  pull(diag_cod)
+# cie9 V
+cie9_5 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V\\d\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 3) |> 
+  pull(diag_cod)
+cie9_6 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V\\d\\d\\.\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 5) |> 
+  pull(diag_cod)
+cie9_7 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V\\d\\d\\.\\d\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 6) |> 
+  pull(diag_cod)
+cie9_8 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V\\d\\d\\.\\d\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 7) |> 
+  pull(diag_cod)
+cie9_9 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V76\\.\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 6) |> 
+  pull(diag_cod)
+# cie10 without E nor V
+cie10_1 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V") == FALSE) |>
+  filter(str_starts(diag_cod, "E") == FALSE) |>
+  filter(str_starts(diag_cod, "\\d") == FALSE) |> 
+  filter(diag_cod %nin% sin_referencia) |> 
+  filter(str_starts(diag_cod, ".\\d")) |> 
+  filter(nchar(diag_cod) == 3) |> 
+  pull(diag_cod)
+cie10_2 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V") == FALSE) |>
+  filter(str_starts(diag_cod, "E") == FALSE) |>
+  filter(str_starts(diag_cod, "\\d") == FALSE) |> 
+  filter(diag_cod %nin% sin_referencia) |> 
+  filter(str_starts(diag_cod, ".\\d.\\.")) |> 
+  pull(diag_cod)
+# cie10 E
+cie10_3 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "E\\d\\d") == TRUE) |>
+  filter(nchar(diag_cod) == 3) |> 
+  pull(diag_cod)
+cie10_4 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "E\\d\\d\\.") == TRUE) |> 
+  pull(diag_cod)
+# cie10 V
+cie10_5 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V") == TRUE) |>
+  filter(nchar(diag_cod) > 7) |> 
+  pull(diag_cod)
+cie10_6 <- codigos_aed |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V") == TRUE) |>
+  filter(str_ends(diag_cod, "X") == TRUE) |>
+  pull(diag_cod)
+
+cie9 <- c(cie9_1, cie9_2, cie9_3, cie9_4, cie9_5, cie9_6, cie9_7, cie9_8, cie9_9)
+cie10 <- c(cie10_1, cie10_2, cie10_3, cie10_4, cie10_5, cie10_6)
+nanda <- c(nanda1, nanda2)
+
+```
+
+```{r}
+# create tipo_codigo---------------------------------------------------------
+codigos_maestro_aed_0 <- codigos_aed |> 
+  mutate(tipo_codigo = case_when(
+    diag_cod %in% sin_referencia ~ "No ref",
+    diag_cod %in% nanda ~ "NANDA",
+    diag_cod %in% cie9 ~ "ICD9CM",
+    diag_cod %in% cie10 ~ "ICD10ES",
+    T ~ "Others"))
+  
+```
+
+```{r}
+# There are not diag_desc so this is unfeasible
+# codigos_maestro_aed_1 <- codigos_maestro_aed_0 |> 
+# # change the "V" codes that are accidents
+#   tidylog::mutate(tipo_codigo = if_else(str_starts(diag_cod, "V") == TRUE &
+#        str_detect(diag_desc, 
+#   "ACCIDENTE|COLISION|QUEMADURA DEBIDA A FUEGO EN OTRA EMBARCACION MOTORIZADA"
+#   ) == TRUE, "ICD10ES", tipo_codigo)) |>  
+#   # change the "V" codes that are observations
+#   tidylog::mutate(tipo_codigo = if_else(str_starts(diag_cod, "V71.") == TRUE & 
+#       str_detect(diag_desc, 
+#        "OBSERVACION DESPUES DE") == TRUE,
+#        "ICD9CM", tipo_codigo)) |>  
+#   tidylog::mutate(tipo_codigo = if_else(str_starts(diag_cod, "V07") == TRUE, 
+#        "ICD9CM", tipo_codigo)) 
+
+
+```
+
+```{r}
+#check codigos_maestro_aed_0
+codigos_maestro_aed_0 |> filter(str_starts(diag_cod, "E") == TRUE) |> 
+  distinct(diag_cod, tipo_codigo) |> 
+   arrange(diag_cod)
+
+codigos_maestro_aed_0 |> filter(str_starts(diag_cod, "V") == TRUE) |> 
+  distinct(diag_cod, tipo_codigo) |> 
+   arrange(diag_cod)
+
+```
+
+
+```{r}
+# check codes one by one in the ecieMap`s
+codigos_maestro_aed_1 <- codigos_maestro_aed_0 |> 
+  tidylog::mutate(tipo_codigo = case_when(
+    # discovered during OMOP CDM standardization
+    diag_cod == "V03.10X" ~ "ICD10ES",
+    diag_cod == "V09.29X" ~ "ICD10ES",
+    diag_cod == "V29.49X" ~ "ICD10ES",
+    diag_cod == "V43.04X" ~ "ICD10ES",
+    diag_cod == "V43.92X" ~ "ICD10ES",
+    diag_cod == "V93.19X" ~ "ICD10ES",
+    diag_cod == "V00.128" ~ "ICD10ES",
+    diag_cod == "V00.131" ~ "ICD10ES",
+    diag_cod == "V00.83" ~ "ICD10ES",
+    diag_cod == "V00.831" ~ "ICD10ES",
+    diag_cod == "V09.20" ~ "ICD10ES",
+    diag_cod == "V09.29" ~ "ICD10ES",
+    diag_cod == "V43.04" ~ "ICD10ES",
+    diag_cod == "V43.92" ~ "ICD10ES",
+    diag_cod == "V88.9" ~ "ICD10ES",
+    diag_cod == "V89.2" ~ "ICD10ES",
+    diag_cod == "V94.8" ~ "ICD10ES",
+    diag_cod == "V95.4" ~ "ICD10ES",
+    # other ambigous codes
+    diag_cod == "V02.51" ~ "ICD9CM",
+    diag_cod == "V03.10" ~ "ICD10ES",
+    diag_cod == "V08" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V10.3" ~ "ICD9CM",
+    diag_cod == "V10.87" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V12.2" ~ "ICD9CM",
+    diag_cod == "V12.59" ~ "ICD9CM",
+    diag_cod == "V13.29" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V14.1" ~ "ICD9CM",
+    diag_cod == "V14.6" ~ "ICD9CM",
+    diag_cod == "V14.8" ~ "ICD9CM",
+    diag_cod == "V15.08" ~ "ICD9CM",
+    diag_cod == "V15.59" ~ "ICD9CM",
+    diag_cod == "V15.82" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V18.1" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V19.5" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V22.0" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V22.1" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V22.2" ~ "ICD9CM",
+    diag_cod == "V23.85" ~ "ICD9CM",
+    diag_cod == "V23.89" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V23.9" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V24.0" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V24.2" ~ "ICD9CM",
+    diag_cod == "V25.42" ~ "ICD9CM",
+    diag_cod == "V25.49" ~ "ICD9CM",
+    diag_cod == "V28.8" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V41.1" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V42.0" ~ "ICD9CM",
+    diag_cod == "V43.82" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V44.6" ~ "ICD9CM",
+    diag_cod == "V45.51" ~ "ICD9CM",
+    diag_cod == "V45.73" ~ "ICD9CM",
+    diag_cod == "V45.77" ~ "ICD9CM",
+    diag_cod == "V45.79" ~ "ICD9CM",
+    diag_cod == "V45.89" ~ "ICD9CM",
+    diag_cod == "V58.11" ~ "ICD9CM",
+    diag_cod == "V58.49" ~ "ICD9CM",
+    diag_cod == "V58.61" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V61.5" ~ "ICD9CM",
+    diag_cod == "V62.82" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V65.5" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V67.9" ~ "ICD9CM",
+    diag_cod == "V71.89" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V71.9" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V72.4" ~ "ICD9CM",
+    # could be both
+    # diag_cod == "V72.6" ~ "ICD9CM",
+    diag_cod == "V78.8" ~ "ICD9CM",
+    diag_cod == "V87.9XX" ~ "ICD10ES",
+    T ~ tipo_codigo
+  ))
+
+```
+
+# Fix incorrect ICD codes 
+
+During the ETL process for the OMOP CDM, we have encountered incorrect ICD9CM and ICD10ES codes that lack an associated standard_concept_id. In this section, we address and rectify these code issues. 
+
+```{r}
+# load concepts vocabulary---------------------------------------------------
+concepts_vocabulary <- fread(file.path("..", "EHDEN", 
+                                       "Vocabularies", "concept.csv"))
+
+```
+
+
+Typically, there are two types of issues:
+
+**1. Addition of a letter or letters at the end of the code:** In certain cases, as a result of Spanish (or regional) adaptation of the ICD standards, one or more letters are appended at the end of the code to indicate a specification (e.g., 413.9A, S30.1X). To resolve this issue, we remove the extraneous letter (e.g., 413.9, S30.1).
+
+**2. Presence of extra digits:** Some codes contain additional digits (e.g., 645.0 or 715.99), which we assume to be errors. To correct this, we remove the extra digits, resulting in revised codes (e.g., 645 or 715.9).
+
+By addressing these issues, we ensure the accuracy and consistency of the ICD9CM and ICD10ES (ICD10CM) codes within the OMOP CDM.
+
+## Correct ICD9CM codes
+
+```{r}
+# obtain icd9 concepts vocabulary--------------------------------------------
+icd9_concepts <- concepts_vocabulary |> 
+  filter(vocabulary_id == "ICD9CM")
+
+```
+
+```{r}
+# aed codes------------------------------------------------------------------
+map_aed_icd9_to_concept_id_0 <- codigos_maestro_aed_1 |>
+  filter(tipo_codigo == "ICD9CM") |> 
+  distinct(diag_cod) |> 
+  arrange(diag_cod)  |> 
+  left_join(icd9_concepts, by = c("diag_cod" = "concept_code"))
+
+# check
+wrong_aed_icd9_codes <- map_aed_icd9_to_concept_id_0 |>
+  select(diag_cod, concept_id) |> 
+  filter(is.na(concept_id)) |>
+  select(-concept_id) |> 
+  mutate(.before = 1, issue = if_else(str_detect(diag_cod, "\\d[aA-zZ]"), 
+                         "letter at the end", "non-existent code")) |> 
+  arrange(issue, diag_cod)
+
+```
+
+```{r}
+# fix the unmapped codes-----------------------------------------------------
+wrong_aed_icd9_codes_corrected <- wrong_aed_icd9_codes |> 
+  mutate(diag_cod_cleaned = case_when(
+  # remove the last letter for CV specification
+  str_detect(diag_cod, "\\d[aA-zZ]") == TRUE ~ 
+    str_sub(diag_cod, 1, nchar(diag_cod) -1),
+  # correct errors
+  T ~ diag_cod
+    ))
+
+saveRDS(wrong_aed_icd9_codes_corrected, file.path("Resultados", "icd_issues",
+                               "wrong_aed_icd9_codes_corrected.RDS"))
+
+```
+
+<br>
+
+```{r}
+#| eval: true
+#| echo: false
+#| tbl-cap-location: top
+#| tbl-cap: "ICD9CM Code Issues in aed Table"
+#| label: tbl-aedicd9issues
+
+# table of the wrong codes and the proposed fix------------------------------
+wrong_aed_icd9_codes_corrected <- readRDS(file.path("Resultados", "icd_issues",
+                               "wrong_aed_icd9_codes_corrected.RDS"))
+
+wrong_aed_icd9_codes_corrected |>
+  gt(id = "aedicd9") |>  # need to name the table to apply CSS
+  fmt_markdown(columns = everything()) |> 
+  cols_label(issue = "Issue",
+             diag_cod = "Original code",
+             diag_cod_cleaned = "Corrected code"
+             )|> 
+  tab_style(
+    style = list(
+      cell_fill(color = "#9473d8"),
+      cell_text(color = "white", align = "center", weight = "bold")
+    ),
+    locations = cells_column_labels()) |>
+  cols_align(
+  align = "center",
+  columns = everything()) |> 
+    opt_row_striping( row_striping = TRUE) |>
+  tab_options(
+    container.height = "400px"
+  ) |>  
+  opt_css(
+    css = "
+    #aedicd9 tr:hover {
+    background-color: #f2cce4;
+    }
+    ")
+
+```
+
+::: {.callout-important}
+There are not ICD9CM issues in the **AED** table.
+:::
+
+<br>
+
+```{r}
+# fix the unmapped codes in the aed table------------------------------------
+codigos_maestro_aed_2 <- codigos_maestro_aed_1 |> 
+  left_join(wrong_aed_icd9_codes_corrected |> 
+              mutate(tipo_codigo = "ICD9CM")) |>
+  select(-issue) |> 
+  tidylog::distinct()
+
+```
+
+
+```{r}
+# map again with the corrected codes-----------------------------------------
+map_aed_icd9_to_concept_id <- codigos_maestro_aed_2 |>
+  filter(tipo_codigo == "ICD9CM") |>
+  mutate(diag_cod = if_else(!is.na(diag_cod_cleaned),
+                            diag_cod_cleaned, diag_cod)) |> 
+  select(-diag_cod_cleaned) |> 
+  distinct(diag_cod) |> 
+  arrange(diag_cod) |> 
+  left_join(icd9_concepts, by = c("diag_cod" = "concept_code"))
+
+# check
+map_aed_icd9_to_concept_id |>
+  select(diag_cod, concept_id) |> 
+  filter(is.na(concept_id))
+## all is mapped -> OK
+
+```
+
+
+## Correct ICD10ES codes
+
+```{r}
+# obtain icd9 concepts vocabulary--------------------------------------------
+icd10_concepts <- concepts_vocabulary |> 
+  filter(vocabulary_id == "ICD10CM")
+
+```
+
+```{r}
+# aed codes------------------------------------------------------------------
+map_aed_icd10_to_concept_id_0 <- codigos_maestro_aed_2 |>
+  filter(tipo_codigo == "ICD10ES") |> 
+  distinct(diag_cod) |> 
+  arrange(diag_cod)  |> 
+  left_join(icd10_concepts, by = c("diag_cod" = "concept_code"))
+
+# check
+wrong_aed_icd10_codes <- map_aed_icd10_to_concept_id_0 |>
+  select(diag_cod, concept_id) |> 
+  filter(is.na(concept_id)) |>
+  select(-concept_id) |> 
+  mutate(.before = 1, issue = if_else(str_detect(diag_cod, "\\d?[aA-zZ]"), 
+                         "letter at the end", "non-existent code")) |> 
+  arrange(issue, diag_cod)
+
+```
+
+
+```{r}
+# check the fix
+codigos_maestro_aed_2 |>
+  filter(tipo_codigo == "ICD10ES") |> 
+  distinct(diag_cod) |>
+  filter(diag_cod %in% (wrong_aed_icd10_codes |> pull(diag_cod))) |> 
+  arrange(diag_cod) |> 
+  mutate(diag_cod_cleaned = str_remove(diag_cod, "(X{1,3}|\\.[X]{1,3})$")) 
+
+# the fix is correct
+
+```
+
+
+```{r}
+# fix the unmapped codes-----------------------------------------------------
+wrong_aed_icd10_codes_corrected <- wrong_aed_icd10_codes |> 
+  mutate(diag_cod_cleaned = str_remove(diag_cod, "(X{1,3}|\\.[X]{1,3})$"))
+
+saveRDS(wrong_aed_icd10_codes_corrected, file.path("Resultados", "icd_issues",
+                               "wrong_aed_icd10_codes_corrected.RDS"))
+
+```
+
+<br>
+
+```{r}
+#| eval: true
+#| echo: false
+#| tbl-cap-location: top
+#| tbl-cap: "ICD10CM Code Issues in aed Table"
+#| label: tbl-aedicd10issues
+
+# table of the wrong codes and the proposed fix------------------------------
+wrong_aed_icd10_codes_corrected <- readRDS(file.path("Resultados", "icd_issues",
+                               "wrong_aed_icd10_codes_corrected.RDS"))
+
+wrong_aed_icd10_codes_corrected |>
+  gt(id = "aedicd10") |>  # need to name the table to apply CSS
+  fmt_markdown(columns = everything()) |> 
+  cols_label(issue = "Issue",
+             diag_cod = "Original code",
+             diag_cod_cleaned = "Corrected code"
+             )|> 
+  tab_style(
+    style = list(
+      cell_fill(color = "#9473d8"),
+      cell_text(color = "white", align = "center", weight = "bold")
+    ),
+    locations = cells_column_labels()) |>
+  cols_align(
+  align = "center",
+  columns = everything()) |> 
+    opt_row_striping( row_striping = TRUE) |>
+  tab_options(
+    container.height = "400px"
+  ) |>  
+  opt_css(
+    css = "
+    #aedicd10 tr:hover {
+    background-color: #f2cce4;
+    }
+    ")
+
+```
+
+<br>
+
+```{r}
+# fix the unmapped codes in the aed table------------------------------------
+codigos_maestro_aed_3 <- codigos_maestro_aed_2 |> 
+  left_join(wrong_aed_icd10_codes_corrected |> 
+              mutate(tipo_codigo = "ICD10ES"), 
+            by = c("diag_cod", "tipo_codigo")) |>
+  tidylog::distinct() |> 
+  mutate(diag_cod_cleaned = if_else(
+    !is.na(diag_cod_cleaned.x), diag_cod_cleaned.x, diag_cod_cleaned.y)) |> 
+  select(-diag_cod_cleaned.x, -diag_cod_cleaned.y, -issue)
+
+```
+
+
+```{r}
+# map again with the corrected codes-----------------------------------------
+map_aed_icd10_to_concept_id <- codigos_maestro_aed_3 |>
+  filter(tipo_codigo == "ICD10ES") |>
+  mutate(diag_cod = if_else(!is.na(diag_cod_cleaned),
+                            diag_cod_cleaned, diag_cod)) |>
+  select(-diag_cod_cleaned) |> 
+  arrange(diag_cod) |> 
+  left_join(icd10_concepts, by = c("diag_cod" = "concept_code"))
+
+# check
+map_aed_icd10_to_concept_id |>
+  select(diag_cod, concept_id) |> 
+  filter(is.na(concept_id))
+## all is mapped -> OK
+
+```
+
+
+
+# Include tipo_codigo into AED
+
+```{r}
+# add tipo_codigo1,2 to aed--------------------------------------------------
+aed_2 <- aed_1 |> 
+  # add tipo_codigo1
+  left_join(codigos_maestro_aed_3, 
+            by = c("diag_cod" = "diag_cod")) |>
+  mutate(diag_cod = if_else(!is.na(diag_cod_cleaned),
+                            diag_cod_cleaned, diag_cod)) |> 
+  select(-diag_cod_cleaned) |> 
+  rename(tipo_codigo1 = tipo_codigo) |> 
+  # add tipo_codigo2
+  left_join(codigos_maestro_aed_3, 
+            by = c("diag2_cod" = "diag_cod")) |>
+  mutate(diag2_cod = if_else(!is.na(diag_cod_cleaned),
+                            diag_cod_cleaned, diag2_cod)) |> 
+  select(-diag_cod_cleaned) |>
+  rename(tipo_codigo2 = tipo_codigo)
+
+```
+
+
+```{r}
+# check aed_2
+aed_2 |> count(tipo_codigo1, tipo_codigo2)
+aed_2 |> filter(tipo_codigo1 != tipo_codigo2)
+aed_2 |> filter(tipo_codigo1 == "ICD9CM",
+                tipo_codigo2 == "ICD10ES")
+aed_2 |> filter(tipo_codigo1 == "ICD10ES",
+                tipo_codigo2 == "ICD9CM")
+
+```
+
+# Fix bases with the feedback from the Quality Checks
+
+Note that we are using the *tidylog* variation of *tidyverse* verbs in order to obtain more information about the curation process.
+
+```{r}
+# depure base from QC feedback-----------------------------------------------
+aed <- aed_2 |> 
+  # remove missing sip (RFqwh4PcfAcSBlICoKtN/w==)
+  tidylog::filter(sip != "RFqwh4PcfAcSBlICoKtN/w==") |> 
+  # fix format (save correctly spanish characters: "ñ", "´")
+  tidylog::mutate(
+    motivo_urg_desc = enc2utf8(motivo_urg_desc),
+    circ_alta_desc = enc2utf8(circ_alta_desc),
+    prioridad_desc = enc2utf8(prioridad_desc)
+    ) |>
+  # fix missing fecha_alta
+  mutate(fecha_alta = if_else(is.na(fecha_alta), fecha_registro, fecha_alta)) |> 
+  # check duplicates
+  tidylog::distinct() 
+
+# check aed  
+aed |> skim(fecha_registro, fecha_alta)
+aed |> filter(fecha_registro > fecha_alta)
+aed |> distinct(circ_alta_cod, circ_alta_desc) |> arrange(circ_alta_cod)
+
+```
+
+# Save base
+
+```{r}
+# write table----------------------------------------------------------------
+
+# save in SSD
+fwrite(aed, append = FALSE, file = file.path("Origin_tables", "aed.csv"))
+# save in CERES
+fwrite(aed, file.path(procesados, "aed.csv"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_05_AED_curation_CONSIGN.qmd"))
+file.copy(from = file.path("1_05_AED_curation_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

@@ -1,0 +1,122 @@
+---
+title: "CONSIGN: GAIA Curation. Part II"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes-----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+```{r}
+# tx-------------------------------------------------------------------------
+tx_v3 <- fread(file.path("Origin_tables", "auxiliar", "tx_v3.csv"))
+
+names(tx_v3)
+
+```
+
+# Remove duplicates
+
+```{r}
+# group duplicated clv_trat--------------------------------------------------
+tx_v3_tagged <- tx_v3 |>
+  rename(
+    sip = "V1",
+    clv_trat = "NUM_SIP",
+    precio = "CLAVE_TRAT") |> 
+  clean_names() |> 
+  add_count(clv_trat, name = "n_clv_trat")
+
+tx_v3_rep <- tx_v3_tagged |> 
+  filter(n_clv_trat > 1) |> 
+  select(-n_clv_trat) |> 
+  group_by(clv_trat) |> 
+  summarise(across(.fns = ~dplyr::first(na.omit(.))))
+
+# base without duplicates----------------------------------------------------
+tx_v3_cleaned <- tx_v3_tagged |> 
+  # unique treatments
+  filter(n_clv_trat == 1) |>
+  select(-n_clv_trat) |> 
+  # grouped treatments
+  bind_rows(tx_v3_rep) |> 
+  rename(
+    unidades = "precio",
+    cadencia = "unidades_posol",
+    env_durac = "cadencia_posol",
+    estado_trat = "num_dias_envase",
+    fecha_ini = "estado_trat",
+    fecha_fin = "fecha_ini",
+    atc_cod = "fecha_fin",
+    prin_act_cod = "cod_princ_atc",
+    pres_farma_cod = "cod_principio",
+    pres_farma_desc = "cod_pres_farma",
+    diag_cod = "cod_diagproc"
+    )
+
+```
+
+# Save base
+
+```{r}
+# save tx_v3_cleaned---------------------------------------------------------
+fwrite(tx_v3_cleaned, file.path("Origin_tables", "auxiliar", 
+                                  "tx_v3_cleaned.csv"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_07_2_GAIA_clean_tx_CONSIGN.qmd"))
+file.copy(from = file.path("1_07_2_GAIA_clean_tx_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>
