@@ -400,7 +400,6 @@ For now, it is not possible to perform the ETL process for the '**From pmr to de
 
 ```
 
-
 # Load source tables: part two
 
 ```{r}
@@ -2188,6 +2187,10 @@ fwrite(from_gaia_to_drug_exposure, append = FALSE,
        file = file.path("Target_tables", "AUXILIAR",
                         "from_gaia_to_drug_exposure.csv"))
 
+from_gaia_to_drug_exposure <- fread(
+  file.path("Target_tables", "AUXILIAR",
+                        "from_gaia_to_drug_exposure.csv"))
+
 last_gaia_drug_exposure_id <- 
   max(from_gaia_to_drug_exposure$drug_exposure_id)
 
@@ -2376,6 +2379,8 @@ concepts_vocabulary |> filter(concept_id == 45884084)
 ```{r}
 # populate table-------------------------------------------------------------
 from_redmiva_to_measurement <- redmiva |> 
+  # temporal fix -> move to curation script
+  filter(sip %in% sips_consign) |>
   transmute(
     measurement_id = 1:n(),
     person_source_value = sip,
@@ -2425,7 +2430,7 @@ cdm_source <- tibble(
   cdm_source_abbreviation = "vid_consign",
   cdm_holder = "FISABIO-HSRP",
   source_description = "Instance of the CONSIGN project utilizing the VID data",
-  source_documentation_reference = "https://github.com/frasansa/OHDSI-VID_to_OMOP_ETL",
+  source_documentation_reference = "https://github.com/frasansa/OHDSI-VID_to_OMOP_ETL/tree/main/doc",
   cdm_etl_reference = "https://github.com/frasansa/OHDSI-VID_to_OMOP_ETL",
   source_release_date = ymd("2022-01-01"),
   cdm_release_date = ymd("2023-07-08"),
