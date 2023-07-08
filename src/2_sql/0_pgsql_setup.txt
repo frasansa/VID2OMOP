@@ -1,0 +1,15 @@
+# create the database
+initdb -D D:\PostgreSQL\pgsql\data -U Francisco -E utf8 -W
+
+# start and stop the connection
+pg_ctl -D D:\PostgreSQL\pgsql\data -l logfile start
+pg_ctl -D D:\PostgreSQL\pgsql\data -l logfile stop
+
+# run .sql in psql
+psql -d postgres -U Francisco -f D:\R_Projects\EHDEN\sql_files_vid_consign\1_OMOPCDM_postgresql_5.4_ddl.sql
+psql -d postgres -U Francisco -f D:\R_Projects\EHDEN\sql_files_vid_consign\2_OMOP CDM vocabulary load - PostgreSQL.sql
+psql -d postgres -U Francisco -f D:\R_Projects\EHDEN\sql_files_vid_consign\3_1_OMOPCDM_postgresql_5.4_populate_tables_vid.sql
+psql -d postgres -U Francisco -f D:\R_Projects\EHDEN\sql_files_vid_consign\3_2_OMOPCDM_postgresql_5.4_populate_tables_vid.sql
+psql -d postgres -U Francisco -f D:\R_Projects\EHDEN\sql_files_vid_consign\4_OMOPCDM_postgresql_5.4_primary_keys.sql
+psql -d postgres -U Francisco -f D:\R_Projects\EHDEN\sql_files_vid_consign\5_OMOPCDM_postgresql_5.4_indices.sql
+psql -d postgres -U Francisco -f D:\R_Projects\EHDEN\sql_files_vid_consign\6_OMOPCDM_postgresql_5.4_constraints.sql
