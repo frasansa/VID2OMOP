@@ -324,6 +324,7 @@ fwrite(from_sip_to_person_write, append = FALSE,
 # fwrite(sip_periods, append = FALSE,
 #        file = file.path("Target_tables", "AUXILIAR",
 #                         "sip_periods.csv"))
+# rm(sip_periods_0, sip_periods_1, sip_periods_2)
 
 ```
 
@@ -404,7 +405,7 @@ For now, it is not possible to perform the ETL process for the '**From pmr to de
 
 ```{r}
 # free up some memory--------------------------------------------------------
-rm(sip, sip_periods, sip_periods_0, sip_periods_1, sip_periods_2,
+rm(sip, sip_periods, 
    from_sip_to_care_site, from_sip_to_care_site_write,
    from_sip_to_death, from_sip_to_observation_period, 
    from_sip_to_person, from_sip_to_person_write)
@@ -705,9 +706,9 @@ rm(visit_occurrence_vid, visit_occurrence_vid_0)
 
 ```{r}
 # load concepts vocabulary---------------------------------------------------
-concepts_vocabulary <- fread(file.path("vocabularies3", "CONCEPT.csv"))
-concepts_relationship <- fread(file.path("vocabularies3", "CONCEPT_RELATIONSHIP.csv"))
-concepts_ancestor <- fread(file.path("vocabularies3", "CONCEPT_ANCESTOR.csv"))
+concepts_vocabulary <- fread(file.path("Vocabularies", "CONCEPT.csv"))
+concepts_relationship <- fread(file.path("Vocabularies", "CONCEPT_RELATIONSHIP.csv"))
+concepts_ancestor <- fread(file.path("Vocabularies", "CONCEPT_ANCESTOR.csv"))
 
 ```
 
@@ -1059,6 +1060,9 @@ manual_condition_relationship <- manual_condition_relationship_0 |>
 concepts_relationship_icd9_icd10 <- concepts_relationship_icd9 |> 
   union(concepts_relationship_icd10) |> 
   union(manual_condition_relationship)
+
+fwrite(concepts_relationship_icd9_icd10, file.path("Target_tables", 
+                  "AUXILIAR", "concepts_relationship_icd9_icd10.csv"))
 
 ```
 
@@ -1930,6 +1934,9 @@ concepts_relationship_route <- concepts_relationship_route_0 |>
   distinct(route_concept_id,
            route_source_value = via_desc)
 
+fwrite(concepts_relationship_route, file.path("Target_tables", 
+                  "AUXILIAR", "concepts_relationship_route.csv"))
+
 ```
 
 
@@ -2047,6 +2054,9 @@ concepts_relationship_atc <- concepts_relationship |>
   union(manual_atc_drug_relationship) |> 
   tidylog::distinct()
 
+fwrite(concepts_relationship_atc, file.path("Target_tables", 
+                  "AUXILIAR", "concepts_relationship_atc.csv"))
+
 ```
 
 
@@ -2080,6 +2090,9 @@ concepts_relationship_siv_drug <- siv_clinical_drugs2 |>
          drug_source_value = tipo_vacuna) |> 
   distinct()
   
+fwrite(concepts_relationship_siv_drug, file.path("Target_tables", 
+                  "AUXILIAR", "concepts_relationship_siv_drug.csv"))
+
 ```
 
 ## From gaia to drug_exposure
@@ -2386,7 +2399,7 @@ from_redmiva_to_measurement <- redmiva |>
     person_source_value = sip,
     measurement_concept_id = case_when(
       tipo_prueba == "PCR" ~ 586310,
-      tipo_prueba == "PCR" ~ 37310257,
+      tipo_prueba == "AG" ~ 37310257,
       T ~ 0),
     measurement_date = fecha_prueba,
     measurement_datetime = fecha_prueba,
@@ -2433,7 +2446,7 @@ cdm_source <- tibble(
   source_documentation_reference = "https://github.com/frasansa/OHDSI-VID_to_OMOP_ETL/tree/main/doc",
   cdm_etl_reference = "https://github.com/frasansa/OHDSI-VID_to_OMOP_ETL",
   source_release_date = ymd("2022-01-01"),
-  cdm_release_date = ymd("2023-07-08"),
+  cdm_release_date = ymd(Sys.Date()),
   cdm_version = "5.4",
   cdm_version_concept_id = 756265,
   vocabulary_version = "v5.0 31-MAY-23"
@@ -2445,6 +2458,7 @@ fwrite(cdm_source, append = FALSE,
                         "cdm_source_vid.csv"))
 
 ```
+
 
 ::: {.tocify-extend-page data-unique="tocify-extend-page" style="height: 0;"}
 :::
