@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Francisco Sanchez-Saez">
-<meta name="dcterms.date" content="2023-07-08">
+<meta name="dcterms.date" content="2023-08-18">
 
-<title>FISABIO-HSRP OMOP ETL design v1.1</title>
+<title>FISABIO-HSRP OMOP ETL design v1.4</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -2623,7 +2623,7 @@ vertical-align: -.125em;
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">FISABIO-HSRP OMOP ETL design v1.1</h1>
+<h1 class="title">FISABIO-HSRP OMOP ETL design v1.4</h1>
 </div>
 
 
@@ -2640,7 +2640,7 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">July 8, 2023</p>
+      <p class="date">August 18, 2023</p>
     </div>
   </div>
   
@@ -3164,6 +3164,14 @@ background-color: #f2cce4;
 <li>After performing the DQD analysis, the values of certain variables have been modified from NA_integer_ or NA_real to 0 in order to comply with the completeness tests.</li>
 <li>After performing the DQD analysis, the values of certain ‘datetime’ variables have been modified from NA_Date_ to the Date value.</li>
 <li>The expected timeline for milestone 3 has been revised from ‘month 10’ to ‘month 11’ in the <strong>NEXT STEPS</strong> section.</li>
+</ol>
+</div></td></tr>
+    <tr><td headers="version_number" class="gt_row gt_left" style="text-align: left; font-weight: bold; font-variant: small-caps;"><div class="gt_from_md"><p>1.4</p>
+</div></td>
+<td headers="date" class="gt_row gt_left"><div class="gt_from_md"><p>2023-08-18</p>
+</div></td>
+<td headers="changes" class="gt_row gt_left"><div class="gt_from_md"><ol>
+<li>The fields of the <strong>measurement</strong> table have been reordered according to the order of the <a href="https://ohdsi.github.io/CommonDataModel/cdm54.html#MEASUREMENT">Specification Document for the OMOP Common Data Model, v5.4.</a></li>
 </ol>
 </div></td></tr>
   </tbody>
@@ -15175,19 +15183,6 @@ background-color: #f2cce4;
 </div></td>
 <td headers="logic" class="gt_row gt_right gt_striped"><div class="gt_from_md"></div></td>
 <td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"></div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>value_as_concept_id</em></p>
-</div></td>
-<td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"><p><em>resultado</em></p>
-</div></td>
-<td headers="logic" class="gt_row gt_right"><div class="gt_from_md"></div></td>
-<td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>Positivo</p>
-</div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>value_source_value</em></p>
-</div></td>
-<td headers="source_field" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p><em>fecha_prueba</em></p>
-</div></td>
-<td headers="logic" class="gt_row gt_right gt_striped"><div class="gt_from_md"></div></td>
-<td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"></div></td></tr>
     <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>measurement_datetime</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"><p><em>fecha_prueba</em></p>
@@ -15196,15 +15191,15 @@ background-color: #f2cce4;
 <td headers="comment" class="gt_row gt_left"><div class="gt_from_md"></div></td></tr>
     <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>measurement_time</em></p>
 </div></td>
-<td headers="source_field" class="gt_row gt_left gt_striped"><div class="gt_from_md"></div></td>
+<td headers="source_field" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p><em>fecha_prueba</em></p>
+</div></td>
 <td headers="logic" class="gt_row gt_right gt_striped"><div class="gt_from_md"></div></td>
-<td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p>‘32856: Lab’.</p>
-</div></td></tr>
+<td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"></div></td></tr>
     <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>measurement_type_concept_id</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right"><div class="gt_from_md"></div></td>
-<td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>0</p>
+<td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>‘32856: Lab’.</p>
 </div></td></tr>
     <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>operator_concept_id</em></p>
 </div></td>
@@ -15214,70 +15209,83 @@ background-color: #f2cce4;
 </div></td></tr>
     <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>value_as_number</em></p>
 </div></td>
-<td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"><p><em>resultado</em></p>
-</div></td>
+<td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right"><div class="gt_from_md"></div></td>
-<td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>‘Positive: 45884084’.</p>
+<td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>0</p>
 </div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>unit_concept_id</em></p>
+    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>value_as_concept_id</em></p>
 </div></td>
-<td headers="source_field" class="gt_row gt_left gt_striped"><div class="gt_from_md"></div></td>
+<td headers="source_field" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p><em>resultado</em></p>
+</div></td>
 <td headers="logic" class="gt_row gt_right gt_striped"><div class="gt_from_md"></div></td>
-<td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p>0</p>
+<td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p>‘Positive: 45884084’.</p>
 </div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>range_low</em></p>
+    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>unit_concept_id</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right"><div class="gt_from_md"></div></td>
 <td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>0</p>
 </div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>range_high</em></p>
+    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>range_low</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left gt_striped"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right gt_striped"><div class="gt_from_md"></div></td>
 <td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p>0</p>
 </div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>provider_id</em></p>
+    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>range_high</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right"><div class="gt_from_md"></div></td>
-<td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>NA_integer_</p>
+<td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>0</p>
 </div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>visit_occurrence_id</em></p>
+    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>provider_id</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left gt_striped"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right gt_striped"><div class="gt_from_md"></div></td>
 <td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p>NA_integer_</p>
 </div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>visit_detail_id</em></p>
+    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>visit_occurrence_id</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right"><div class="gt_from_md"></div></td>
 <td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>NA_integer_</p>
 </div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>measurement_source_value</em></p>
+    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>visit_detail_id</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left gt_striped"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right gt_striped"><div class="gt_from_md"></div></td>
-<td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p>0</p>
+<td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p>NA_integer_</p>
 </div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>measurement_source_concept_id</em></p>
+    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>measurement_source_value</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right"><div class="gt_from_md"></div></td>
 <td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>0</p>
 </div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>unit_source_value</em></p>
+    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>measurement_source_concept_id</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left gt_striped"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right gt_striped"><div class="gt_from_md"></div></td>
 <td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p>0</p>
 </div></td></tr>
-    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>unit_source_concept_id</em></p>
+    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>unit_source_value</em></p>
 </div></td>
 <td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"></div></td>
 <td headers="logic" class="gt_row gt_right"><div class="gt_from_md"></div></td>
 <td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>0</p>
+</div></td></tr>
+    <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>unit_source_concept_id</em></p>
+</div></td>
+<td headers="source_field" class="gt_row gt_left gt_striped"><div class="gt_from_md"></div></td>
+<td headers="logic" class="gt_row gt_right gt_striped"><div class="gt_from_md"></div></td>
+<td headers="comment" class="gt_row gt_left gt_striped"><div class="gt_from_md"><p>0</p>
+</div></td></tr>
+    <tr><td headers="destination_field" class="gt_row gt_left" style="font-weight: bold;"><div class="gt_from_md"><p><em>value_source_value</em></p>
+</div></td>
+<td headers="source_field" class="gt_row gt_left"><div class="gt_from_md"><p><em>resultado</em></p>
+</div></td>
+<td headers="logic" class="gt_row gt_right"><div class="gt_from_md"></div></td>
+<td headers="comment" class="gt_row gt_left"><div class="gt_from_md"><p>Positivo</p>
 </div></td></tr>
     <tr><td headers="destination_field" class="gt_row gt_left gt_striped" style="font-weight: bold;"><div class="gt_from_md"><p><em>measurement_event_id</em></p>
 </div></td>
