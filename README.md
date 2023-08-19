@@ -30,7 +30,9 @@ In the `src` folder are contained the R scripts in .qmd format and the .sql inst
 
 2. Create a PostgreSQL database.
 
-3. Run the .sql instructions.
+3. Create a schema: "vid_consign". 
+
+4. Run the .sql instructions.
 
 ## License
 
