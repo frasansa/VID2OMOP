@@ -63,14 +63,14 @@ In the `src` folder are contained the R scripts in .qmd format and the .sql inst
   ```
 - Create ***settings.xml*** file: In the root of the WebAPI project folder, there is a file named ***sample_settings.xml***. Copy this file into a new folder WebAPIConfig and rename it to ***settings.xml***. Note: WebAPIConfig will be subfolder off of the root WebAPI folder. Change the parameters according to the specifications following the guide.
 
-- Build the ***WebAPI.war***. From the root of the WebAPI Project folder (D:\Git\OHDSI\WebAPI) run the following maven command to create the .war file which will be used to deploy and run WebAPI:
+- Build the ***WebAPI.war***. From the root of the WebAPI Project folder `D:\Git\OHDSI\WebAPI` run the following maven command to create the .war file which will be used to deploy and run WebAPI:
 
   ```console
 D:\Git\OHDSI\WebAPI> mvn clean package -DskipUnitTests -DskipITtests -s WebAPIConfig/settings.xml -P webapi-postgresql
   ```
 - Configure Tomcat parameters:
 
-  Before we can deploy WebAPI, we need to configure Tomcat to allow us to log into the manager interface. To do this, navigate to the conf folder ` C:\tomcat\conf` and edit the file *tomcat-users.xml*. Add the following XML in the <tomcat-users> block:
+  Before we can deploy WebAPI, we need to configure Tomcat to allow us to log into the manager interface. To do this, navigate to the conf folder `C:\tomcat\conf` and edit the file *tomcat-users.xml*. Add the following XML in the <tomcat-users> block:
   
   ```console
   <role rolename="manager-gui"/>
@@ -104,14 +104,51 @@ D:\Git\OHDSI\WebAPI> mvn clean package -DskipUnitTests -DskipITtests -s WebAPICo
     ```console
     C:\tomcat\bin> catalina.bat run > ..\logs\webapi.log 2>&1
     ```
+- Login and deploy the .war file. Possibly, do you need to create some manual grants in pgadmin4.
+
 #### 2.3. Connect local WebAPI to the backend CDM tables
 
 - For this step we will use the following guide: <https://github.com/OHDSI/WebAPI/wiki/CDM-Configuration>.
+
+- Populate the Webapi tables:
+
+  - Open a browser and paste the following URL:
   
+  ```console
+  http://localhost:8080/WebAPI/ddl/results?dialect=postgresql&schema=vid_consign_results&vocabSchema=vid_consign&tempSchema=vid_consign_temp&initConceptHierarchy=true
+  ```
+  
+  - A SQL script has been generated. Run it in the pgadmin 4.
+  
+- Create a ***webasi_sa*** user and create the corresponding permissions.
+  
+- Define *source* and *source_daimon* tables.
+
+- Check that all is OK in <http://localhost:8080/WebAPI/source/refresh>.
+
 #### 2.4. Setup local Atlas:
 
 - For this step we will use the following guide: <https://github.com/OHDSI/Atlas/wiki/Atlas-Setup-Guide>.
-  
+
+- Download the [latest release of ATLAS](https://github.com/OHDSI/Atlas/releases).
+
+- From the root of the ATLAS folder, run the following command:
+
+  ```console
+  D:\git\ohdsi\Atlas> npm run build
+  ```
+- Copy the Atlas folder into `C:\tomcat\webapps`.
+
+- Check that all is OK in <http://localhost:8080/Atlas>.
+
+### 3. Run the inspection tools
+
+#### 3.1. Run achilles
+
+#### 3.2. Run DQD
+
+#### 3.3. Run CDM inspection
+
 ## License
 
 OHDSI-VID_to_OMOP_ETL is licensed under Apache License 2.0.
