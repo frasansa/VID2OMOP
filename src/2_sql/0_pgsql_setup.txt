@@ -7,6 +7,7 @@ pg_ctl -D D:\PostgreSQL\pgsql\data -l logfile stop
 
 # run .sql in psql
 psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\1_OMOPCDM_postgresql_5.4_ddl.sql
+# CAUTION! 2_OMOPCDM_postgresql_5.4_vocabulary_load.sql should be run from pgadmin4
 psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\2_OMOPCDM_postgresql_5.4_vocabulary_load.sql
 psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\3_1_OMOPCDM_postgresql_5.4_populate_tables_vid.sql
 psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\3_2_OMOPCDM_postgresql_5.4_populate_tables_vid.sql
