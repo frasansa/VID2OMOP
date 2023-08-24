@@ -141,11 +141,30 @@ D:\Git\OHDSI\WebAPI> mvn clean package -DskipUnitTests -DskipITtests -s WebAPICo
 
 - Check that everything is OK at <http://localhost:8080/Atlas>.
 
+#### 2.5. Reopen local Atlas.
+
+- It is possible to reopen the Atlas local following the next steps.
+
+- Start the PostgreSQL connection:
+
+   ```console
+   pg_ctl -D D:\PostgreSQL\pgsql\data -l logfile start
+   ```
+
+- Start tomcat:
+
+   ```console
+   C:\tomcat\bin> catalina.bat run > ..\logs\webapi.log 2>&1
+   ```
+
+- Start webapi app from the tomcat manager: <http://localhost:8080/manager/html>.
+
 ### 3. Run the inspection tools and catalogue export
 
 - Run the CDMInspection tool (<https://github.com/EHDEN/CdmInspection>).
 
 - Run the CatalogueExport tool (<https://github.com/EHDEN/CatalogueExport>).
+
 
 ## License
 
