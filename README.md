@@ -61,12 +61,13 @@ The `src` folder includes R scripts in .qmd format and .sql instructions.
   ```console
   D:\Git\OHDSI> git clone https://github.com/OHDSI/WebAPI.git
   ```
+  
 - Create ***settings.xml*** file: In the root of the WebAPI project folder, there is a file named ***sample_settings.xml***. Copy this file into a new folder WebAPIConfig and rename it to ***settings.xml***. Note: WebAPIConfig will be subfolder off of the root WebAPI folder. Change the parameters according to the specifications following the guide.
 
 - Build the ***WebAPI.war***. From the root of the WebAPI Project folder `D:\Git\OHDSI\WebAPI` run the following maven command to create the .war file, which will be used to deploy and run WebAPI:
 
   ```console
-D:\Git\OHDSI\WebAPI> mvn clean package -DskipUnitTests -DskipITtests -s WebAPIConfig/settings.xml -P webapi-postgresql
+  D:\Git\OHDSI\WebAPI> mvn clean package -DskipUnitTests -DskipITtests -s WebAPIConfig/settings.xml -P    webapi-postgresql
   ```
 - Configure Tomcat parameters:
 
