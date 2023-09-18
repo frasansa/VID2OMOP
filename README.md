@@ -38,6 +38,8 @@ The `src` folder includes R scripts in .qmd format and .sql instructions.
 
 - Create a schema: 'vid_consign_results' to store Achilles and DataQualityDashboard results.
 
+- Create a schema: 'vid_consign_temp' to store temporal files.
+
 - Run the Achilles tool (<https://github.com/OHDSI/Achilles>).
 
 - Run the DataQualityDashboard tool (<https://github.com/OHDSI/DataQualityDashboard>).
