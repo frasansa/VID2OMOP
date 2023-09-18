@@ -45,39 +45,13 @@ last revised: 2023-07-07 (By Francisco Sanchez Saez)
 
 *************************/
 
-TRUNCATE vid_consign.DRUG_STRENGTH;
-
 COPY vid_consign.DRUG_STRENGTH FROM 'D:\R_Projects\EHDEN\Vocabularies\DRUG_STRENGTH.csv' WITH DELIMITER E'\t' CSV HEADER QUOTE E'\b' ;
-
-TRUNCATE vid_consign.CONCEPT;
-
 COPY vid_consign.CONCEPT FROM 'D:\R_Projects\EHDEN\Vocabularies\CONCEPT.csv' WITH DELIMITER E'\t' CSV HEADER QUOTE E'\b' ;
-
-TRUNCATE vid_consign.CONCEPT_RELATIONSHIP;
-
 COPY vid_consign.CONCEPT_RELATIONSHIP FROM 'D:\R_Projects\EHDEN\Vocabularies\CONCEPT_RELATIONSHIP.csv' WITH DELIMITER E'\t' CSV HEADER QUOTE E'\b' ;
-
-TRUNCATE vid_consign.CONCEPT_ANCESTOR;
-
 COPY vid_consign.CONCEPT_ANCESTOR FROM 'D:\R_Projects\EHDEN\Vocabularies\CONCEPT_ANCESTOR.csv' WITH DELIMITER E'\t' CSV HEADER QUOTE E'\b' ;
-
-TRUNCATE vid_consign.CONCEPT_SYNONYM;
-
 COPY vid_consign.CONCEPT_SYNONYM FROM 'D:\R_Projects\EHDEN\Vocabularies\CONCEPT_SYNONYM.csv' WITH DELIMITER E'\t' CSV HEADER QUOTE E'\b' ;
-
-TRUNCATE vid_consign.VOCABULARY;
-
 COPY vid_consign.VOCABULARY FROM 'D:\R_Projects\EHDEN\Vocabularies\VOCABULARY.csv' WITH DELIMITER E'\t' CSV HEADER QUOTE E'\b' ;
-
-TRUNCATE vid_consign.RELATIONSHIP;
-
 COPY vid_consign.RELATIONSHIP FROM 'D:\R_Projects\EHDEN\Vocabularies\RELATIONSHIP.csv' WITH DELIMITER E'\t' CSV HEADER QUOTE E'\b' ;
-
-TRUNCATE vid_consign.CONCEPT_CLASS;
-
 COPY vid_consign.CONCEPT_CLASS FROM 'D:\R_Projects\EHDEN\Vocabularies\CONCEPT_CLASS.csv' WITH DELIMITER E'\t' CSV HEADER QUOTE E'\b' ;
-
-TRUNCATE vid_consign.DOMAIN;
-
 COPY vid_consign.DOMAIN FROM 'D:\R_Projects\EHDEN\Vocabularies\DOMAIN.csv' WITH DELIMITER E'\t' CSV HEADER QUOTE E'\b' ;
-
+COPY vid_consign.SOURCE_TO_CONCEPT_MAP FROM 'D:\R_Projects\EHDEN\Target_tables\source_to_concept_map_vid.csv' WITH DELIMITER E',' CSV HEADER QUOTE E'\b' ;
