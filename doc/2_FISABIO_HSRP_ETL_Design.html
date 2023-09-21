@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Francisco Sanchez-Saez">
-<meta name="dcterms.date" content="2023-09-18">
+<meta name="dcterms.date" content="2023-09-21">
 
 <title>FISABIO-HSRP OMOP ETL design v2.0</title>
 <style>
@@ -2634,6 +2634,11 @@ vertical-align: -.125em;
   <li><a href="#target-table-observation" id="toc-target-table-observation" class="nav-link" data-scroll-target="#target-table-observation"><span class="toc-section-number">3.2.2</span>  Target table: observation</a></li>
   <li><a href="#target-table-source_to_concept_map" id="toc-target-table-source_to_concept_map" class="nav-link" data-scroll-target="#target-table-source_to_concept_map"><span class="toc-section-number">3.2.3</span>  Target table: source_to_concept_map</a></li>
   </ul></li>
+  <li><a href="#part-iii-overview" id="toc-part-iii-overview" class="nav-link" data-scroll-target="#part-iii-overview"><span class="toc-section-number">3.3</span>  Part III Overview</a>
+  <ul class="collapse">
+  <li><a href="#derived-table-condition_era" id="toc-derived-table-condition_era" class="nav-link" data-scroll-target="#derived-table-condition_era"><span class="toc-section-number">3.3.1</span>  Derived table: condition_era</a></li>
+  <li><a href="#derived-table-drug_era" id="toc-derived-table-drug_era" class="nav-link" data-scroll-target="#derived-table-drug_era"><span class="toc-section-number">3.3.2</span>  Derived table: drug_era</a></li>
+  </ul></li>
   </ul></li>
   <li><a href="#vocabulary-mapping" id="toc-vocabulary-mapping" class="nav-link" data-scroll-target="#vocabulary-mapping"><span class="toc-section-number">4</span>  VOCABULARY MAPPING</a></li>
   <li><a href="#next-steps" id="toc-next-steps" class="nav-link" data-scroll-target="#next-steps"><span class="toc-section-number">5</span>  NEXT STEPS</a></li>
@@ -2669,7 +2674,7 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">September 18, 2023</p>
+      <p class="date">September 21, 2023</p>
     </div>
   </div>
   
@@ -15501,6 +15506,20 @@ background-color: #f2cce4;
 <h3 data-number="3.2.3" class="anchored" data-anchor-id="target-table-source_to_concept_map"><span class="header-section-number">3.2.3</span> Target table: source_to_concept_map</h3>
 <p>The source to concept map table is a legacy data structure within the OMOP Common Data Model, recommended for use in ETL processes to maintain local source codes which are not available as Concepts in the Standardized Vocabularies, and to establish mappings for each source code into a Standard Concept as target_concept_ids that can be used to populate the Common Data Model tables.</p>
 <p><br></p>
+</section>
+</section>
+<section id="part-iii-overview" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="part-iii-overview"><span class="header-section-number">3.3</span> Part III Overview</h2>
+<p>TIn this part, the derived tables <strong>condition_era</strong> and <strong>drug_era</strong> are created.</p>
+<section id="derived-table-condition_era" class="level3" data-number="3.3.1">
+<h3 data-number="3.3.1" class="anchored" data-anchor-id="derived-table-condition_era"><span class="header-section-number">3.3.1</span> Derived table: condition_era</h3>
+<p>A Condition Era is defined as a span of time when the Person is assumed to have a given condition. Similar to Drug Eras, Condition Eras are chronological periods of Condition Occurrence. Combining individual Condition Occurrences into a single Condition Era serves two purposes:</p>
+<p>It allows aggregation of chronic conditions that require frequent ongoing care, instead of treating each Condition Occurrence as an independent event.</p>
+<p>It allows aggregation of multiple, closely timed doctor visits for the same Condition to avoid double-counting the Condition Occurrences. For example, consider a Person who visits her Primary Care Physician (PCP) and who is referred to a specialist. At a later time, the Person visits the specialist, who confirms the PCP’s original diagnosis and provides the appropriate treatment to resolve the condition. These two independent doctor visits should be aggregated into one Condition Era.</p>
+</section>
+<section id="derived-table-drug_era" class="level3" data-number="3.3.2">
+<h3 data-number="3.3.2" class="anchored" data-anchor-id="derived-table-drug_era"><span class="header-section-number">3.3.2</span> Derived table: drug_era</h3>
+<p>A Drug Era is defined as a span of time when the Person is assumed to be exposed to a particular active ingredient. A Drug Era is not the same as a Drug Exposure: Exposures are individual records corresponding to the source when Drug was delivered to the Person, while successive periods of Drug Exposures are combined under certain rules to produce continuous Drug Eras.</p>
 </section>
 </section>
 </section>
