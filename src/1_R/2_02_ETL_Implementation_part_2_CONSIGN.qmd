@@ -1,0 +1,827 @@
+---
+title: "OMOP ETL Implementation part 2: CONSIGN"
+author: "Francisco Sanchez-Saez"
+date: "last-modified"
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    highlight-style: breeze
+    css: style.css
+    embed-resources: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions-----------------------------------------------
+source(file.path("..","scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+
+```
+
+# Load OMOP tables
+
+```{r}
+# load tables----------------------------------------------------------------
+condition_occurrence_vid_0 <- fread(file.path("Target_tables", "AUXILIAR",
+                                           "condition_occurrence_vid_0.csv"))
+
+procedure_occurrence_vid_0 <- fread(file.path("Target_tables", "AUXILIAR",
+                                           "procedure_occurrence_vid_0.csv"))
+
+drug_exposure_vid_0 <- fread(file.path("Target_tables", "AUXILIAR", 
+                                     "drug_exposure_vid_0.csv"))
+
+measurement_vid_0 <- fread(file.path("Target_tables",  "AUXILIAR",
+                                     "measurement_vid_0.csv"))
+
+```
+
+```{r}
+# load concepts vocabulary---------------------------------------------------
+concepts_vocabulary <- fread(file.path("Vocabularies", "CONCEPT.csv"))
+concepts_relationship <- fread(file.path("Vocabularies", "CONCEPT_RELATIONSHIP.csv"))
+concepts_ancestor <- fread(file.path("Vocabularies", "CONCEPT_ANCESTOR.csv"))
+
+```
+
+```{r}
+# obtain standard concepts---------------------------------------------------
+standards_concepts <- concepts_vocabulary |> 
+  filter(standard_concept == "S") 
+
+standard_concept_codes <- standards_concepts |> 
+  distinct(concept_id) |> pull()
+
+standard_observation_concept_codes <- standards_concepts |>
+  filter(domain_id == "Observation") |>
+  distinct(concept_id) |> pull()
+
+```
+
+# Check domains
+
+```{r}
+# check condition_occurrence_vid_0 table---------------------------------------
+condition_concepts_id <- condition_occurrence_vid_0 |> 
+  distinct(condition_concept_id) |> 
+  pull(condition_concept_id)
+
+concepts_vocabulary |> 
+  filter(concept_id %in% condition_concepts_id) |> 
+  count(domain_id)
+
+# check procedure_occurrence_vid_0 table---------------------------------------
+procedure_concepts_id <- procedure_occurrence_vid_0 |> 
+  distinct(procedure_concept_id) |> 
+  pull(procedure_concept_id)
+
+concepts_vocabulary |> 
+  filter(concept_id %in% procedure_concepts_id) |> 
+  count(domain_id)
+
+# check drug_exposure_vid_0 table---------------------------------------
+drug_concepts_id <- drug_exposure_vid_0 |> 
+  distinct(drug_concept_id) |> 
+  pull(drug_concept_id)
+
+concepts_vocabulary |> 
+  filter(concept_id %in% drug_concepts_id) |> 
+  count(domain_id)
+
+```
+
+# condition_occurrence
+
+```{r}
+# append domain to condition_occurrence_vid_0 table----------------------------
+condition_occurrence_vid_0_domain <- condition_occurrence_vid_0 |> 
+  left_join((concepts_vocabulary |> 
+  filter(concept_id %in% condition_concepts_id) |> 
+  select(concept_id, domain_id)), 
+  by = c("condition_concept_id" = "concept_id")) 
+
+condition_occurrence_vid_0_domain |> 
+  tabyl(domain_id)
+
+condition_occurrence_vid_0_domain |> 
+  filter(condition_concept_id != 0) |> 
+  tabyl(domain_id)
+
+condition_occurrence_vid_0_domain |> 
+  filter(condition_concept_id == 0)
+
+```
+
+## from condition_occurrence_vid_0 to condition_occurrence
+
+In the following step, we address the **condition_occurrence** table. During this process, certain non-ICD source codes are removed. It's important to note that is advisable addressing this issue at the *type_vocabulary* creation step during the curation of the original tables.
+
+```{r}
+# fix the condition occurrence table----------------------------------------
+condition_occurrence_vid_0_true <- condition_occurrence_vid_0_domain |> 
+  # in this step the concept_id == 0 observations are removed
+  filter(domain_id == "Condition") |> 
+  mutate(condition_occurrence_id = 1:n()) |> 
+  select(-domain_id)
+
+```
+
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(condition_occurrence_vid_0_true, file.path("Target_tables",
+                                      "condition_occurrence_vid.csv"))
+
+rm(condition_occurrence_vid_0, condition_occurrence_vid_0_true)
+
+```
+
+# observation
+
+## From condition_occurrence to observation
+
+```{r}
+# create condition_occurrence_vid_0_observation with value_as_concept_id var
+concepts_vocabulary |> 
+  filter(concept_id %in% condition_concepts_id) |> 
+  filter(domain_id == "Observation")
+
+observation_condition_source_concept_ids <- condition_occurrence_vid_0_domain |> 
+  filter(domain_id == "Observation") |> 
+  distinct(condition_source_concept_id) |> 
+  pull(condition_source_concept_id)
+
+observation_condition_maps_to_value <- concepts_relationship |> 
+  filter(relationship_id == "Maps to value") |> 
+  filter(concept_id_1 %in% observation_condition_source_concept_ids)   |> 
+  filter(concept_id_2 %in% standard_observation_concept_codes) |> 
+  select(condition_source_concept_id = concept_id_1,
+         value_as_concept_id = concept_id_2)
+
+condition_occurrence_vid_0_observation <- condition_occurrence_vid_0_domain |> 
+  filter(domain_id == "Observation") |> 
+  left_join(observation_condition_maps_to_value, 
+            by = "condition_source_concept_id")
+
+```
+
+```{r}
+# from_condition_occurrence_vid_0_to_observation----------------------------
+from_condition_occurrence_vid_0_to_observation <- condition_occurrence_vid_0_observation |> 
+  transmute(
+    observation_id = 1:n(),
+    person_id = person_id,
+    observation_concept_id = condition_concept_id,
+    observation_date = condition_start_date,
+    observation_datetime = condition_start_datetime,
+    observation_type_concept_id = condition_type_concept_id,
+    value_as_number = 0,
+    value_as_string	= NA_character_,
+    value_as_concept_id = value_as_concept_id,
+    qualifier_concept_id = 0,
+    unit_concept_id = 0,
+    provider_id = NA_integer_,
+    visit_occurrence_id = visit_occurrence_id,
+    visit_detail_id = NA_integer_,
+    observation_source_value = condition_source_value,
+    observation_source_concept_id = condition_source_concept_id,
+    unit_source_value = NA_character_,
+    qualifier_source_value = NA_character_,
+    value_source_value = NA_character_,
+    observation_event_id = NA_integer_,
+    obs_event_field_concept_id = 0
+  )
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+last_condition_occurrence_vid_0_observation_id <- 
+  max(from_condition_occurrence_vid_0_to_observation$observation_id)
+
+fwrite(from_condition_occurrence_vid_0_to_observation, append = FALSE,
+       file = file.path("Target_tables",
+                        "observation_vid.csv"))
+
+```
+
+## From drug_exposure_vid_0 to observation
+
+```{r}
+# create drug_exposure_vid_0_observation with value_as_concept_id var
+concepts_vocabulary |> 
+  filter(concept_id %in% drug_concepts_id) |> 
+  filter(domain_id == "Observation")
+
+observation_drug_concept_ids <- concepts_vocabulary |> 
+  filter(concept_id %in% drug_concepts_id) |> 
+  filter(domain_id == "Observation") |> 
+  distinct(concept_id) |> 
+  pull(concept_id)
+
+observation_drug_source_concept_ids <- drug_exposure_vid_0 |> 
+  filter(drug_concept_id %in% observation_drug_concept_ids) |> 
+  distinct(drug_source_concept_id) |> 
+  pull(drug_source_concept_id)
+
+# there are no value_as_concept_id
+
+```
+
+```{r}
+# from_drug_exposure_vid_0 to observation-----------------------------------
+from_drug_exposure_vid_0_to_observation <- drug_exposure_vid_0 |> 
+  filter(drug_concept_id %in% observation_drug_concept_ids) |> 
+  transmute(
+    observation_id = 1:n() + last_condition_occurrence_vid_0_observation_id,
+    person_id = person_id,
+    observation_concept_id = drug_concept_id,
+    observation_date = drug_exposure_start_date,
+    observation_datetime = drug_exposure_start_datetime,
+    observation_type_concept_id = drug_type_concept_id,
+    value_as_number = 0,
+    value_as_string	= NA_character_,
+    value_as_concept_id = 0,
+    qualifier_concept_id = 0,
+    unit_concept_id = 0,
+    provider_id = NA_integer_,
+    visit_occurrence_id = visit_occurrence_id,
+    visit_detail_id = NA_integer_,
+    observation_source_value = drug_source_value,
+    observation_source_concept_id = drug_source_concept_id,
+    unit_source_value = NA_character_,
+    qualifier_source_value = NA_character_,
+    value_source_value = NA_character_,
+    observation_event_id = NA_integer_,
+    obs_event_field_concept_id = 0
+  )
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_drug_exposure_vid_0_to_observation, append = TRUE,
+       file = file.path("Target_tables",
+                        "observation_vid.csv"))
+
+```
+
+# procedure_occurrence
+
+## From procedure_occurrence_vid_0 to procedure_occurrence
+
+```{r}
+# create procedure_procedure_occurrence_concept_ids-------------------------
+procedure_procedure_occurrence_concept_ids <- concepts_vocabulary |> 
+  filter(concept_id %in% procedure_concepts_id) |> 
+  filter(domain_id == "Procedure") |> 
+  distinct(concept_id) |> 
+  pull(concept_id)
+
+```
+
+
+```{r}
+# from_procedure_occurrence_vid_0_to_procedure_occurrence-------------------
+from_procedure_occurrence_vid_0_to_procedure_occurrence <- procedure_occurrence_vid_0 |>
+  filter(procedure_concept_id %in% procedure_procedure_occurrence_concept_ids) |>
+  arrange(procedure_occurrence_id) |> 
+  mutate(
+    procedure_occurrence_id = 1:n()
+  )
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+last_procedure_occurrence_vid_0_procedure_id <- 
+  max(from_procedure_occurrence_vid_0_to_procedure_occurrence$procedure_occurrence_id)
+
+fwrite(from_procedure_occurrence_vid_0_to_procedure_occurrence, 
+       append = FALSE, 
+       file.path("Target_tables", "procedure_occurrence_vid.csv"))
+
+```
+
+## From condition_occurrence_vid_0 to procedure_occurrence
+
+```{r}
+# check concepts------------------------------------------------------------
+concepts_vocabulary |> 
+  filter(concept_id %in% condition_concepts_id) |> 
+  filter(domain_id == "Procedure")
+
+```
+
+```{r}
+# from_condition_occurrence_vid_0_to_procedure_occurrence-------------------
+from_condition_occurrence_vid_0_to_procedure_occurrence <- condition_occurrence_vid_0_domain |>
+  filter(domain_id == "Procedure") |> 
+  transmute(
+    procedure_occurrence_id = 1:n() + last_procedure_occurrence_vid_0_procedure_id,
+    person_id = person_id,
+    procedure_concept_id = condition_concept_id,
+    procedure_date = condition_start_date,
+    procedure_datetime = condition_start_datetime,
+    procedure_end_date = condition_end_date,
+    procedure_end_datetime = condition_end_datetime,
+    procedure_type_concept_id = condition_type_concept_id,
+    modifier_concept_id = 0,
+    quantity = 1,
+    provider_id = NA_integer_,
+    visit_occurrence_id = visit_occurrence_id,
+    visit_detail_id = NA_integer_,
+    procedure_source_value = condition_source_value,
+    procedure_source_concept_id = condition_source_concept_id,
+    modifier_source_value = "From ICD diagnostic code"
+  )
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_condition_occurrence_vid_0_to_procedure_occurrence, 
+       append = TRUE,
+       file.path("Target_tables", "procedure_occurrence_vid.csv"))
+
+```
+
+# measurement
+
+## From measurement_vid_0 to measurement
+
+```{r}
+# write directly the measurement_vid_0 table into the measurement.csv--------
+last_measurement_vid_0_measurement_id <- max(measurement_vid_0$measurement_id)
+
+fwrite(measurement_vid_0, 
+       append = FALSE,
+       file.path("Target_tables", "measurement_vid.csv"))
+
+```
+
+## From condition_occurrence_vid_0 to measurement
+
+```{r}
+# from_condition_occurrence_vid_0_to_procedure_occurrence-------------------
+from_condition_occurrence_vid_0_to_measurement <- condition_occurrence_vid_0_domain |>
+  filter(domain_id == "Measurement") |> 
+  transmute(
+    measurement_id = 1:n() + last_measurement_vid_0_measurement_id,
+    person_id = person_id,
+    measurement_concept_id = condition_concept_id,
+    measurement_date = condition_start_date,
+    measurement_datetime = condition_start_datetime,
+    measurement_time = condition_start_datetime,
+    measurement_type_concept_id = condition_type_concept_id,
+    operator_concept_id = 0,
+    value_as_number = 0,
+    value_as_concept_id = 0,
+    unit_concept_id = 0,
+    range_low = 0,
+    range_high = 0,
+    provider_id = NA_integer_,
+    visit_occurrence_id = NA_integer_,
+    visit_detail_id = NA_integer_,
+    measurement_source_value = condition_source_value,
+    measurement_source_concept_id = condition_source_concept_id,
+    unit_source_value = 0,
+    unit_source_concept_id = 0,
+    value_source_value = NA_character_,
+    measurement_event_id = NA_integer_,
+    meas_event_field_concept_id = 0)
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_condition_occurrence_vid_0_to_measurement, 
+       append = TRUE,
+       file.path("Target_tables", "measurement_vid.csv"))
+
+```
+
+# drug exposure
+
+## From drug_exposure_vid_0 to drug_exposure
+
+```{r}
+# create drug_drug_exposure_concept_ids-------------------------------------
+drug_drug_exposure_concept_ids <- concepts_vocabulary |> 
+  filter(concept_id %in% drug_concepts_id) |> 
+  filter(domain_id == "Drug") |> 
+  distinct(concept_id) |> 
+  pull(concept_id)
+
+```
+
+```{r}
+# check unmaped concepts------------------------------------------------------
+drug_exposure_vid_0 |> 
+  filter(drug_concept_id == 0)
+# PERFECT 
+
+```
+
+```{r}
+# from_drug_exposure_vid_0_to_drug_exposure---------------------------------
+from_drug_exposure_vid_0_to_drug_exposure <- drug_exposure_vid_0 |>
+  filter(drug_concept_id %in% drug_drug_exposure_concept_ids) |>
+  arrange(drug_exposure_id) |> 
+  mutate(
+    drug_exposure_id = 1:n()
+  )
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+last_drug_exposure_vid_0_drug_id <- 
+  max(from_drug_exposure_vid_0_to_drug_exposure$drug_exposure_id)
+
+fwrite(from_drug_exposure_vid_0_to_drug_exposure, 
+       append = FALSE, 
+       file.path("Target_tables", "drug_exposure_vid.csv"))
+
+```
+
+## From procedure_occurrence_vid_0 to drug_exposure
+
+```{r}
+# create drug_procedure_occurrence_concept_ids------------------------------
+drug_procedure_occurrence_concept_ids <- concepts_vocabulary |> 
+  filter(concept_id %in% procedure_concepts_id) |> 
+  filter(domain_id == "Drug") |> 
+  distinct(concept_id) |> 
+  pull(concept_id)
+
+concepts_vocabulary |> 
+  filter(concept_id %in% drug_procedure_occurrence_concept_ids)
+
+```
+
+
+```{r}
+# from_procedure_occurrence_vid_0_to_drug_exposure--------------------------
+from_procedure_occurrence_vid_0_to_drug_exposure <- procedure_occurrence_vid_0 |>
+  filter(procedure_concept_id %in% drug_procedure_occurrence_concept_ids) |>
+  arrange(procedure_occurrence_id) |> 
+  transmute(
+    drug_exposure_id = 1:n() + last_drug_exposure_vid_0_drug_id,
+    person_id = person_id,
+    drug_concept_id = procedure_concept_id,
+    drug_exposure_start_date = procedure_date,
+    drug_exposure_start_datetime = procedure_datetime,
+    drug_exposure_end_date = procedure_end_date,
+    drug_exposure_end_datetime = procedure_end_datetime,
+    verbatim_end_date = NA_Date_,
+    drug_type_concept_id = procedure_type_concept_id,
+    stop_reason = NA_character_,
+    refills = NA_integer_,
+    quantity = 1,
+    days_supply = NA_integer_,
+    sig = NA_character_,
+    route_concept_id = 4132161,
+    lot_number = 0, # check if it is mandatory, else NA_integer
+    provider_id = NA_integer_,
+    visit_occurrence_id = NA_integer_,
+    visit_detail_id = NA_integer_,
+    drug_source_value = procedure_source_value,
+    drug_source_concept_id = procedure_source_concept_id,
+    route_source_value = NA_character_,
+    dose_unit_source_value = NA_character_
+  )
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_procedure_occurrence_vid_0_to_drug_exposure, 
+       append = TRUE, 
+       file.path("Target_tables", "drug_exposure_vid.csv"))
+
+```
+
+# device_exposure
+
+## From drug_exposure_vid_0 to device_exposure
+
+```{r}
+# create device_drug_exposure_concept_ids-------------------------------------
+device_drug_exposure_concept_ids <- concepts_vocabulary |> 
+  filter(concept_id %in% drug_concepts_id) |> 
+  filter(domain_id == "Device") |> 
+  distinct(concept_id) |> 
+  pull(concept_id)
+
+```
+
+
+```{r}
+# from_drug_exposure_vid_0_to_device_exposure---------------------------------
+from_drug_exposure_vid_0_to_device_exposure <- drug_exposure_vid_0 |>
+  filter(drug_concept_id %in% device_drug_exposure_concept_ids) |>
+  arrange(drug_exposure_id) |> 
+  transmute(
+    device_exposure_id = 1:n(),
+    person_id = person_id,
+    device_concept_id = drug_concept_id,
+    device_exposure_start_date = drug_exposure_start_date,
+    device_exposure_start_datetime = drug_exposure_start_datetime,
+    device_exposure_end_date = drug_exposure_end_date,
+    device_exposure_end_datetime = drug_exposure_end_datetime,
+    device_type_concept_id = drug_type_concept_id,
+    unique_device_id = NA_integer_,
+    production_id = NA_integer_,
+    quantity = 1,
+    provider_id = NA_integer_,
+    visit_occurrence_id = NA_integer_,
+    visit_detail_id = NA_integer_,
+    device_source_value = drug_source_value,
+    device_source_concept_id = drug_source_concept_id,
+    unit_concept_id = 0,
+    unit_source_value = 0,
+    unit_source_concept_id = 0
+  )
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+last_drug_exposure_vid_0_device_id <- 
+  max(from_drug_exposure_vid_0_to_device_exposure$device_exposure_id)
+
+fwrite(from_drug_exposure_vid_0_to_device_exposure, 
+       append = FALSE, 
+       file.path("Target_tables", "device_exposure_vid.csv"))
+
+```
+
+## From procedure_occurence_vid_0 to device_exposure
+
+```{r}
+# create drug_procedure_occurrence_concept_ids------------------------------
+device_procedure_occurrence_concept_ids <- concepts_vocabulary |> 
+  filter(concept_id %in% procedure_concepts_id) |> 
+  filter(domain_id == "Device") |> 
+  distinct(concept_id) |> 
+  pull(concept_id)
+
+concepts_vocabulary |> 
+  filter(concept_id %in% device_procedure_occurrence_concept_ids)
+
+```
+
+
+```{r}
+# from_procedure_occurrence_vid_0_to_device_exposure--------------------------
+from_procedure_occurrence_vid_0_to_device_exposure <- procedure_occurrence_vid_0 |>
+  filter(procedure_concept_id %in% device_procedure_occurrence_concept_ids) |>
+  arrange(procedure_occurrence_id) |> 
+  transmute(
+    device_exposure_id = 1:n() + last_drug_exposure_vid_0_device_id,
+    person_id = person_id,
+    device_concept_id = procedure_concept_id,
+    device_exposure_start_date = procedure_date,
+    device_exposure_start_datetime = procedure_datetime,
+    device_exposure_end_date = procedure_end_date,
+    device_exposure_end_datetime = procedure_end_datetime,
+    device_type_concept_id = procedure_type_concept_id,
+    unique_device_id = NA_integer_,
+    production_id = NA_integer_,
+    quantity = 1,
+    provider_id = NA_integer_,
+    visit_occurrence_id = NA_integer_,
+    visit_detail_id = NA_integer_,
+    device_source_value = procedure_source_value,
+    device_source_concept_id = procedure_source_concept_id,
+    unit_concept_id = 0,
+    unit_source_value = 0,
+    unit_source_concept_id = 0
+  )
+
+```
+
+```{r}
+# write table----------------------------------------------------------------
+fwrite(from_procedure_occurrence_vid_0_to_device_exposure, 
+       append = TRUE, 
+       file.path("Target_tables", "device_exposure_vid.csv"))
+
+```
+
+# source_to_concept_map
+
+```{r}
+# load vocabularies and relationship-----------------------------------------
+concepts_relationship_icd9_icd10 <- fread(file.path("Target_tables", 
+                  "AUXILIAR", "concepts_relationship_icd9_icd10.csv"))
+
+concepts_relationship_icd9_icd10_proc <- fread(file.path("Target_tables", 
+             "AUXILIAR", "concepts_relationship_icd9_icd10_proc.csv"))
+
+
+concepts_relationship_route <- fread(file.path("Target_tables", 
+                  "AUXILIAR", "concepts_relationship_route.csv"))
+
+concepts_relationship_gaia_drug <- fread(file.path("Target_tables", 
+                  "AUXILIAR", "concepts_relationship_gaia_drug.csv"))
+
+concepts_relationship_siv_drug <- fread(file.path("Target_tables", 
+                  "AUXILIAR", "concepts_relationship_siv_drug.csv"))
+
+# load gaia_clinical_drugs---------------------------------------------------
+gaia_clinical_drugs5 <- fread(file.path("..", "Consign", "Resultados",
+                               "gaia_masters", "gaia_clinical_drugs5.csv"),
+                               encoding = "Latin-1")
+
+# load concepts vocabulary---------------------------------------------------
+concepts_vocabulary <- fread(file.path("Vocabularies", "CONCEPT.csv"))
+concepts_relationship <- fread(file.path("Vocabularies", "CONCEPT_RELATIONSHIP.csv"))
+concepts_ancestor <- fread(file.path("Vocabularies", "CONCEPT_ANCESTOR.csv"))
+
+```
+
+
+```{r}
+# create the stcm table for ICD codes----------------------------------------
+stcm_icd <- concepts_relationship_icd9_icd10 |> 
+  transmute(
+  source_code = condition_source_value,
+  source_concept_id = condition_source_concept_id,
+  source_vocabulary_id = tipo_codigo,
+  source_code_description = NA_character_,
+  target_concept_id = condition_concept_id
+  # target_vocabulary_id = ,
+  # valid_start_date = ,
+  # valid_end_date = ,
+  # invalid_reason = 
+    ) |> 
+  left_join(concepts_vocabulary |> select(
+    target_concept_id = concept_id,
+    target_vocabulary_id = vocabulary_id,
+    valid_start_date ,
+    valid_end_date ,
+    invalid_reason
+    ), by = "target_concept_id"
+  )
+
+```
+
+
+```{r}
+# create the stcm table for ICD proc codes-----------------------------------
+stcm_icd_proc <- concepts_relationship_icd9_icd10_proc |> 
+  transmute(
+  source_code = procedure_source_value,
+  source_concept_id = procedure_source_concept_id,
+  source_vocabulary_id = tipo_codigo,
+  source_code_description = NA_character_,
+  target_concept_id = procedure_concept_id
+  # target_vocabulary_id = ,
+  # valid_start_date = ,
+  # valid_end_date = ,
+  # invalid_reason = 
+    ) |> 
+  left_join(concepts_vocabulary |> select(
+    target_concept_id = concept_id,
+    target_vocabulary_id = vocabulary_id,
+    valid_start_date ,
+    valid_end_date ,
+    invalid_reason
+    ), by = "target_concept_id"
+  )
+
+stcm_icd_proc |> filter(target_concept_id == 2793351)
+
+```
+
+
+```{r}
+# create the stcm table for routes--------------------------------------------
+stcm_route <- concepts_relationship_route |>
+  left_join(gaia_clinical_drugs5 |> 
+              distinct(via_cod, 
+                              route_source_value = via_desc),
+            by = "route_source_value") |> 
+  transmute(
+  source_code = via_cod,
+  source_concept_id = 0,
+  source_vocabulary_id = "VID routes",
+  source_code_description = route_source_value,
+  target_concept_id = route_concept_id
+  # target_vocabulary_id = ,
+  # valid_start_date = ,
+  # valid_end_date = ,
+  # invalid_reason = 
+    ) |> 
+  left_join(concepts_vocabulary |> select(
+    target_concept_id = concept_id,
+    target_vocabulary_id = vocabulary_id,
+    valid_start_date ,
+    valid_end_date ,
+    invalid_reason
+    ), by = "target_concept_id"
+  )
+
+```
+
+
+```{r}
+# create the stcm table for atc--------------------------------------------
+stcm_atc <- concepts_relationship_atc |> 
+  transmute(
+  source_code = drug_source_value,
+  source_concept_id = drug_source_concept_id,
+  source_vocabulary_id = "ATC level 5",
+  source_code_description = NA_character_,
+  target_concept_id = drug_concept_id
+  # target_vocabulary_id = ,
+  # valid_start_date = ,
+  # valid_end_date = ,
+  # invalid_reason = 
+    ) |> 
+  left_join(concepts_vocabulary |> select(
+    target_concept_id = concept_id,
+    target_vocabulary_id = vocabulary_id,
+    valid_start_date ,
+    valid_end_date ,
+    invalid_reason
+    ), by = "target_concept_id"
+  )
+
+```
+
+
+```{r}
+# create the stcm table for vaccines-----------------------------------------
+stcm_vx <- concepts_relationship_siv_drug |> 
+  transmute(
+  source_code = drug_source_value,
+  source_concept_id = 0,
+  source_vocabulary_id = "VID vaccines",
+  source_code_description = source_code,
+  target_concept_id = drug_concept_id
+  # target_vocabulary_id = ,
+  # valid_start_date = ,
+  # valid_end_date = ,
+  # invalid_reason = 
+    ) |> 
+  left_join(concepts_vocabulary |> select(
+    target_concept_id = concept_id,
+    target_vocabulary_id = vocabulary_id,
+    valid_start_date ,
+    valid_end_date ,
+    invalid_reason
+    ), by = "target_concept_id"
+  )
+
+```
+
+```{r}
+# une all stcm---------------------------------------------------------------
+source_to_concept_map_vid <- stcm_icd |> 
+  union(stcm_icd_proc) |> 
+  union(stcm_route) |> 
+  union(stcm_atc) |> 
+  union(stcm_vx) |> 
+  mutate(invalid_reason = NA_character_)
+
+source_to_concept_map_vid |> distinct(source_vocabulary_id)
+
+```
+
+```{r}
+# write_stcm-----------------------------------------------------------------
+fwrite(source_to_concept_map_vid, file.path("Target_tables",
+                                   "source_to_concept_map_vid.csv"))
+
+
+
+```
+
+
+
+
+
