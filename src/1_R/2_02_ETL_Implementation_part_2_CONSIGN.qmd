@@ -651,6 +651,9 @@ concepts_relationship_gaia_drug <- fread(file.path("Target_tables",
 concepts_relationship_siv_drug <- fread(file.path("Target_tables", 
                   "AUXILIAR", "concepts_relationship_siv_drug.csv"))
 
+concepts_relationship_atc <- fread( file.path("Target_tables", 
+                  "AUXILIAR", "concepts_relationship_atc.csv"))
+
 # load gaia_clinical_drugs---------------------------------------------------
 gaia_clinical_drugs5 <- fread(file.path("..", "Consign", "Resultados",
                                "gaia_masters", "gaia_clinical_drugs5.csv"),

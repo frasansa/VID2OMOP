@@ -454,8 +454,6 @@ diagnoses <- fread(file.path(origin_tables, "diagnoses.csv"),
 mdr       <- fread2(file.path(origin_tables, "mdr.csv"), encoding = "UTF-8")
 eos       <- fread2(file.path(origin_tables, "eos.csv"),encoding = "UTF-8")
 
-aed |> count(year(fecha_registro))
-
 ```
 
 # visit_occurrence
@@ -2170,11 +2168,11 @@ from_gaia_to_drug_exposure_0 <- gaia |>
   transmute(
     person_source_value = sip,
     # drug_concept_id = "map",
-    drug_exposure_start_date = if_else(!is.na(fecha_disp),
-                                       fecha_disp, fecha_pres),
+    drug_exposure_start_date = ymd(if_else(!is.na(fecha_disp),
+                                       fecha_disp, fecha_pres)),
     drug_exposure_start_datetime = drug_exposure_start_date,
     drug_exposure_end_date = drug_exposure_start_date %m+% 
-      days(min(1, ceiling(env_durac), na.rm = TRUE)),
+      days(pmax(1, ceiling(env_durac), na.rm = TRUE)),
     drug_exposure_end_datetime = drug_exposure_end_date,
     verbatim_end_date = NA_Date_,
     drug_type_concept_id = if_else(!is.na(fecha_disp),
