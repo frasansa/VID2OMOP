@@ -11,6 +11,8 @@ psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\1
 psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\2_OMOPCDM_postgresql_5.4_vocabulary_load.sql
 psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\3_1_OMOPCDM_postgresql_5.4_populate_tables_vid.sql
 psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\3_2_OMOPCDM_postgresql_5.4_populate_tables_vid.sql
+psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\3_3_OMOPCDM_postgresql_5.4_populate_condition_era.sql
+psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\3_4_OMOPCDM_postgresql_5.4_populate_drug_era.sql
 psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\4_OMOPCDM_postgresql_5.4_primary_keys.sql
 psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\5_OMOPCDM_postgresql_5.4_indices.sql
 psql -d postgres -U Francisco -f D:\R_Projects\OHDSI-VID_to_OMOP_ETL\src\2_sql\6_OMOPCDM_postgresql_5.4_constraints.sql
