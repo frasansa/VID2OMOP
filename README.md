@@ -1,6 +1,6 @@
 <img src="logo_grupo.png" alt="Logo" width="200">
 
-# OHDSI-VID_to_OMOP_ETL
+# VID2OMOP
 
 ## Table of Contents
 
