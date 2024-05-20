@@ -24,13 +24,13 @@ The `doc` folder contains the following documentation:
 
 The `src` folder includes R scripts in .qmd format and .sql instructions.
 
-## Steps
+## Steps for creating a new instance
 
 ### 1. Create a PostgreSQL Database
 
 - Create staged tables from R (.qmd) scripts.
 
-- Create a PostgreSQL database.
+- Create a PostgreSQL database (e.g. postgres).
 
 - Create a schema: 'vid_consign'.
 
@@ -172,10 +172,61 @@ It is possible to reopen the Atlas local following the next steps.
 
 - Run the CatalogueExport tool (<https://github.com/EHDEN/CatalogueExport>).
 
+## Steps to update the instance
+
+### 1. Create a PostgreSQL Database
+
+- Create staged tables from R (.qmd) scripts.
+
+- Create a new PostgreSQL database (e.g. postgres2).
+
+- Create a schema: 'vid_consign'.
+
+- Run the .sql instructions.
+
+- Create a schema: 'vid_consign_results' to store Achilles and DataQualityDashboard results.
+
+- Create a schema: 'vid_consign_temp' to store temporal files.
+
+- Create a schema: 'webapi' to store temporal files.
+
+- Run the Achilles tool (<https://github.com/OHDSI/Achilles>).
+
+- Run the DataQualityDashboard tool (<https://github.com/OHDSI/DataQualityDashboard>).
+
+### 2. Deploy a Local Atlas Instance
+
+- Delete the "C:\tomcat\webapps\WebAPI.war" file.
+
+- Update the database name (e.g. postgres to postgres2) in "D:\git\ohdsi\WebAPI\WebAPIConfig\settings.xml"
+
+- Start tomcat:
+
+   ```console
+   C:\tomcat\bin> catalina.bat run > ..\logs\webapi.log 2>&1
+   ```
+
+- Login and deploy the .war file. 
+
+- Populate the WebAPI tables:
+
+  - Open a browser and paste the following URL:
+  
+  ```console
+  http://localhost:8080/WebAPI/ddl/results?dialect=postgresql&schema=vid_consign_results&vocabSchema=vid_consign&tempSchema=vid_consign_temp&initConceptHierarchy=true
+  ```
+  
+  - A SQL script has been generated. Run it in the pgadmin 4.
+  
+- Define *source* and *source_daimon* tables (sql scripts).
+
+- Check that everything is OK at <http://localhost:8080/WebAPI/source/refresh>.
+
+- Check that everything is OK at <http://localhost:8080/Atlas>.
 
 ## License
 
-OHDSI-VID_to_OMOP_ETL is licensed under Apache License 2.0.
+VID2OMOP is licensed under Apache License 2.0.
 
 ## Acknowledgement
 
