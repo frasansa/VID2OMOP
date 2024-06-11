@@ -18,9 +18,9 @@ This repository contains instructions and scripts for ETL from the VID dataset t
 
 The `doc` folder contains the following documentation:
 
-- [1_VID_Catalogue.html](doc/1_VID_Catalogue.html): A description of the VID catalogue.
+- [1_VID_Catalogue_v2.1.html](doc/1_VID_Catalogue.html): A description of the VID catalogue.
 
-- [2_FISABIO_HSRP_ETL_Design_v_1_4.html](doc/2_FISABIO_HSRP_ETL_Design_v_1_4.html): A description of the ETL process.
+- [2_FISABIO_HSRP_ETL_Design_v3.1.html](doc/2_FISABIO_HSRP_ETL_Design.html): A description of the ETL process.
 
 The `src` folder includes R scripts in .qmd format and .sql instructions.
 
