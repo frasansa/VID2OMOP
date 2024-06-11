@@ -1,0 +1,159 @@
+---
+title: "CONSIGN: SIV Exploratory"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+```{r}
+# load siv-------------------------------------------------------------------
+siv <- fread(file = file.path("Origin_tables", "siv.csv"))
+
+```
+
+# CHECKS
+
+```{r}
+# read table------------------------------------------------------------------
+gaia <- fread(file = file.path("Origin_tables", "gaia.csv"))
+
+```
+
+```{r}
+sips_gaia_gripe <- gaia %>% filter(str_starts(atc_cod, "J07BB")) %>% distinct(sip) %>% pull()
+
+siv %>% filter(tipo_vacuna == "GRIPE") %>% filter(sip %in% sips_gaia_gripe)
+gaia %>% filter(str_starts(atc_cod, "J07")) 
+
+```
+
+# Cargar base
+
+```{r}
+# cargar sips consign----------------------------------------------------------
+sips_consign <- readRDS(file.path("Resultados", "sips_consign.RDS"))
+
+```
+
+```{r}
+# cargar base de vacunas
+siv <- fread2(file.path("Origin_tables", "siv.csv"))
+  
+```
+
+```{r}
+# check values
+siv %>% filter(dosis > 10)
+
+
+```
+
+# SIPS
+
+```{r}
+# analizar las mujeres distintas-----------------------------------------------
+# obtener sips de SIV
+sips_siv <- siv %>% distinct(sip) %>% pull()
+# comprobar que todos los sips de SIV están en SIP
+setdiff(sips_siv, sips_consign)
+# calcular número de sips que están en SIV
+n_sips_siv <- siv %>% distinct(sip) %>% nrow
+# proporción de sips que están en SIV
+n_prop_siv <- n_sips_siv/sips_consign %>% length()
+
+n_siv <- list(
+  n_obs = siv %>% nrow2(),
+  n_sip = siv %>% distinct(sip) %>% nrow2(),
+  n_prop = n_prop_siv
+)
+
+saveRDS(n_siv, file.path("Resultados", "n_siv.RDS"))
+  
+```
+
+# Tipo de vacuna
+
+```{r}
+# tipo
+siv %>% count(tipo_vacuna, sort = TRUE)
+
+```
+
+# Fechas
+
+```{r}
+# pintar número de vacunas puestas cada semana---------------------------------
+gg_siv1 <- siv %>% 
+  mutate(fecha = floor_date(fecha_vacuna, unit = "week")) %>% 
+  count(fecha) %>% 
+  ggplot(aes(x = fecha, y = n)) +
+  geom_line(color = "blue") +
+  ggtitle("Número de vacunas puestas por semana")
+
+saveRDS(gg_siv1, file.path("Resultados", "gg_siv1.RDS"))
+
+```
+
+```{r}
+# pintar número de vacunas puestas cada mes por tipo---------------------------
+gg_siv2 <- siv %>% 
+  mutate(fecha = floor_date(fecha_vacuna, unit = "week")) %>%
+  mutate(tipo_vacuna = factor(tipo_vacuna)) %>% 
+  mutate(tipo_vacuna = forcats::fct_lump_n(tipo_vacuna, n = 6)) %>% 
+  count(fecha, tipo_vacuna) %>% 
+  ggplot(aes(x = fecha, y = n, colour = tipo_vacuna)) +
+  geom_line() +
+  ggtitle("Número de vacunas puestas cada semana por tipo")
+
+saveRDS(gg_siv2, file.path("Resultados", "gg_siv2.RDS"))
+
+
+```
+
+
+

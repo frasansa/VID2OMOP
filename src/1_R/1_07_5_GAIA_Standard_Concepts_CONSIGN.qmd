@@ -42,10 +42,10 @@ overflow-y: scroll;
 
 ```{r}
 # load pathes----------------------------------------------------------------
-path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+path_origenes_consign <- file.path( "r:", "CONSIGN_SD2270", 
                                     "1-DATOS", "1-BRUTOS")
 
-procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+procesados <- file.path( "r:", "CERES2", "CONSIGN_SD2270", 
                          "1-DATOS", "3-PROCESADOS")
 
 ```
@@ -1530,7 +1530,14 @@ gaia_clinical_drugs5 <- gaia_clinical_drugs4 |>
 
 ```
 
-# Save gaia
+```{r}
+# check drug tables----------------------------------------------------------
+drug_exposure_vid <- fread(file.path("..", "EHDEN", "Target_tables",
+                           "drug_exposure_vid.csv"))
+
+```
+
+# Save gaia_clinical_drugs5
 
 ```{r}
 # save master----------------------------------------------------------------
@@ -1539,36 +1546,13 @@ fwrite(gaia_clinical_drugs5, file.path("Resultados", "gaia_masters",
 
 ```
 
-# Create file to use with usagi
-
-```{r}
-# create and save usagi_gaia-------------------------------------------------
-usagi_gaia <- gaia_clinical_drugs5 |> 
-  count(pres_farma_cod, pres_farma_desc)
-
-usagi_gaia_sin_barra <- gaia_clinical_drugs5 |> 
-  count(pres_farma_cod, pres_farma_desc) |> 
-  mutate(pres_farma_desc = str_remove_all(pres_farma_desc, "/"))
-
-
-fwrite(usagi_gaia, file.path("Resultados", "gaia_masters", "usagi",
-                                      "usagi_gaia.csv"))
-fwrite(usagi_gaia_sin_barra, file.path("Resultados", "gaia_masters", "usagi",
-                                      "usagi_gaia_sin_barra.csv"))
-
-```
-
-
-
-
-
 ```{r}
 #| include: false
 # copy .qmd to CERES---------------------------------------------------------
-unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+unlink(file.path("r:", "CONSIGN_SD2270", "2-SCRIPTS", "R",
                  "1_07_5_GAIA_Standard_Concepts_CONSIGN.qmd"))
 file.copy(from = file.path("1_07_5_GAIA_Standard_Concepts_CONSIGN.qmd"),
-          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+          to = file.path("r:", "CONSIGN_SD2270",
                          "2-SCRIPTS", "R"))
 
 ```

@@ -1,0 +1,78 @@
+title: "CONSIGN: AED Curation."
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+```
+
+```{r }
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load bases and rename variables
+
+```{r}
+# load pathes-----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+
+```{r limpiar_red, echo=FALSE, warning=FALSE, message=FALSE}
+# cargar_bases-----------------------------------------------------------------
+cong_00 <- read_xlsx(file.path(path_origenes_consign, 
+             "13_CONG", "ext2", "V99",
+            "casosAC2018-2019_enviadoCONSIGN_anonimizado.xlsx")) %>% 
+  # cambiar a minúsculas  
+  clean_names("snake")  
+
+```
+
+# Procesar 
+
+Introducir la información como eventos del bebé o como eurocat
+
+```{r}
+# fox base----------------------------------------------------------------
+cong <- cong_00 |> 
+  rename(
+    sip = sipmadre
+  )
+
+
+```
+
+# Guardar base
+
+```{r write_siv, echo=FALSE, message=FALSE, warning=FALSE}
+# write table------------------------------------------------------------------
+fwrite(cong, append = FALSE, file = file.path("Origin_tables", "cong.csv"))
+
+```

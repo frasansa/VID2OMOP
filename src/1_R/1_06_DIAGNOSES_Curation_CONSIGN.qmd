@@ -1,0 +1,599 @@
+---
+title: "CONSIGN: DIAGNOSES Curation"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes-----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+The next function clean the names of the datasource and fix the format of the dates variables.
+
+```{r}
+# function to load and rename vars--------------------------------------------
+clean_diag_2018_2021 <- function(x, ...){
+  fread(encoding = "Latin-1", file = x, ...) |> 
+  # change to lower case  
+  clean_names("snake") |> 
+  # rename variables
+  rename(
+    sip = num_sip,
+    fecha_act = fec_ini,
+    fecha_desact = fec_fin,
+    diag_cod = cod_diag,
+    diag_desc = desc_diag) |> 
+  # fix dates
+  mutate(fecha_act = ymd(fecha_act),
+         fecha_desact = ymd(fecha_desact)) |> 
+  # relocate variables
+   relocate(
+     sip,
+     fecha_act,
+     fecha_desact,
+     diag_cod,
+     diag_desc
+   )
+}
+ 
+```
+
+```{r}
+# load_bases-----------------------------------------------------------------
+diagnoses_0 <- clean_diag_2018_2021(file.path(path_origenes_consign, 
+            "06_DIAGNOSES", "ext2", "V99",
+            "SIS_31692_SD2270_SIA_DIAGNOSTICOS.sql.log.enc.txt"))
+
+```
+
+# Create tipo_codigo variable
+
+```{r}
+# check duplicates-----------------------------------------------------------
+diagnoses_1 <- diagnoses_0 |> 
+  tidylog::distinct()
+
+```
+
+```{r}
+# types of codes-------------------------------------------------------------
+# -1 & -2
+sin_referencia <- c("", "-1", "-2", "-1.0", "-2.0")
+
+codigos_diagnoses <- diagnoses_1 |>
+  distinct(diag_desc, diag_cod)
+
+```
+
+
+```{r}
+# Detect NANDA
+nanda1 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |> 
+  filter(str_detect(diag_cod, "\\.") == FALSE) |> 
+  filter(diag_cod %nin% c("605A", "605B")) |> 
+  filter(nchar(diag_cod) > 3) |> 
+  filter(str_starts(diag_cod, "E") == FALSE) |> 
+  pull(diag_cod)
+nanda2 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_detect(diag_cod, "\\.") == TRUE) |> 
+  filter(str_starts(diag_cod, "000") == TRUE) |> 
+  pull(diag_cod)
+# cie9 without letters 3 digits without point + 605A and 605B
+cie9_1 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |> 
+  filter(nchar(diag_cod) == 3 | diag_cod %in% c("605A", "605B")) |>  
+  filter(str_starts(diag_cod, "\\d") == TRUE) |> 
+  filter(str_detect(diag_cod, "\\.") == FALSE) |>  
+  pull(diag_cod)
+# cie9 without letters with point
+cie9_2 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "\\d\\d\\d\\.") == TRUE) |> 
+  pull(diag_cod)
+# cie9 E
+cie9_3 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "E\\d\\d\\d\\.") == TRUE) |> 
+  pull(diag_cod)
+cie9_4 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "E\\d\\d\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 4) |> 
+  pull(diag_cod)
+# cie9 V
+cie9_5 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V\\d\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 3) |> 
+  pull(diag_cod)
+cie9_6 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V\\d\\d\\.\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 5) |> 
+  pull(diag_cod)
+cie9_7 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V\\d\\d\\.\\d\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 6) |> 
+  pull(diag_cod)
+cie9_8 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V\\d\\d\\.\\d\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 7) |> 
+  pull(diag_cod)
+cie9_9 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V76\\.\\d") == TRUE) |> 
+  filter(nchar(diag_cod) == 6) |> 
+  pull(diag_cod)
+# cie10 without E nor V
+cie10_1 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V") == FALSE) |>
+  filter(str_starts(diag_cod, "E") == FALSE) |>
+  filter(str_starts(diag_cod, "\\d") == FALSE) |> 
+  filter(diag_cod %nin% sin_referencia) |> 
+  filter(str_starts(diag_cod, ".\\d")) |> 
+  filter(nchar(diag_cod) == 3) |> 
+  pull(diag_cod)
+cie10_2 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V") == FALSE) |>
+  filter(str_starts(diag_cod, "E") == FALSE) |>
+  filter(str_starts(diag_cod, "\\d") == FALSE) |> 
+  filter(diag_cod %nin% sin_referencia) |> 
+  filter(str_starts(diag_cod, ".\\d.\\.")) |> 
+  pull(diag_cod)
+# cie10 E
+cie10_3 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "E\\d\\d") == TRUE) |>
+  filter(nchar(diag_cod) == 3) |> 
+  pull(diag_cod)
+cie10_4 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "E\\d\\d\\.") == TRUE) |> 
+  pull(diag_cod)
+# cie10 V
+cie10_5 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V") == TRUE) |>
+  filter(nchar(diag_cod) > 7) |> 
+  pull(diag_cod)
+cie10_6 <- codigos_diagnoses |> distinct(diag_cod) |> 
+  arrange(diag_cod) |>
+  filter(str_starts(diag_cod, "V") == TRUE) |>
+  filter(str_ends(diag_cod, "X") == TRUE) |>
+  pull(diag_cod)
+
+cie9 <- c(cie9_1, cie9_2, cie9_3, cie9_4, cie9_5, cie9_6, cie9_7, cie9_8, cie9_9)
+cie10 <- c(cie10_1, cie10_2, cie10_3, cie10_4, cie10_5, cie10_6)
+nanda <- c(nanda1, nanda2)
+
+```
+
+```{r}
+# add tipo_codigo------------------------------------------------------------
+codigos_maestro_diagnoses_0 <- codigos_diagnoses |>  
+  tidylog::mutate(tipo_codigo = case_when(
+    diag_cod %in% sin_referencia ~ "No ref",
+    diag_cod %in% nanda ~ "NANDA",
+    diag_cod %in% cie9 ~ "ICD9CM",
+    diag_cod %in% cie10 ~ "ICD10ES",
+    T ~ "Others"))
+
+```
+
+```{r}
+# check counts of tipo_codigo------------------------------------------------
+codigos_maestro_diagnoses_0 |> count(tipo_codigo)
+
+```
+
+```{r}
+# fix dubious ICD9CM/ICD10ES codes-------------------------------------------
+codigos_maestro_diagnoses_1 <- codigos_maestro_diagnoses_0 |>
+  # change the "V" codes that are accidents
+  mutate(tipo_codigo = if_else(str_starts(diag_cod, "V") == TRUE & 
+                                 str_detect(diag_desc,
+"ACCIDENTE|COLISION|QUEMADURA DEBIDA A FUEGO EN OTRA EMBARCACION MOTORIZADA"
+) == TRUE, "ICD10ES", tipo_codigo)) |>
+  # change the "V" codes that are observations
+  mutate(tipo_codigo = if_else(str_starts(diag_cod, 
+         "V71.") == TRUE & str_starts(diag_desc,
+  "OBSERVACION DESPUES DE") == TRUE,
+  "ICD9CM", tipo_codigo)) |>
+  mutate(tipo_codigo = if_else(str_starts(diag_cod, "V07") == TRUE, 
+                               "ICD9CM", tipo_codigo))
+
+```
+
+```{r}
+# check codes----------------------------------------------------------------
+codigos_maestro_diagnoses_1 |> 
+  filter(str_starts(diag_cod, "V") == TRUE) |> 
+  distinct(diag_cod, diag_desc, tipo_codigo) |>
+  arrange(diag_cod)
+
+codigos_maestro_diagnoses_1 |> 
+  filter(tipo_codigo == "No ref") |> 
+  distinct(diag_cod, diag_desc)
+
+```
+
+# Fix incorrect ICD codes 
+
+During the ETL process for the OMOP CDM, we have encountered incorrect ICD9CM and ICD10ES codes that lack an associated standard_concept_id. In this section, we address and rectify these code issues. 
+
+```{r}
+# load concepts vocabulary---------------------------------------------------
+concepts_vocabulary <- fread(file.path("..", "EHDEN", 
+                                       "Vocabularies", "concept.csv"))
+
+```
+
+
+Typically, there are two types of issues:
+
+**1. Addition of a letter or letters at the end of the code:** In certain cases, as a result of Spanish (or regional) adaptation of the ICD standards, one or more letters are appended at the end of the code to indicate a specification (e.g., 413.9A, S30.1X). To resolve this issue, we remove the extraneous letter (e.g., 413.9, S30.1).
+
+**2. Presence of extra digits:** Some codes contain additional digits (e.g., 645.0 or 715.99), which we assume to be errors. To correct this, we remove the extra digits, resulting in revised codes (e.g., 645 or 715.9).
+
+By addressing these issues, we ensure the accuracy and consistency of the ICD9CM and ICD10ES (ICD10CM) codes within the OMOP CDM.
+
+## Correct ICD9CM codes
+
+```{r}
+# obtain icd9 concepts vocabulary--------------------------------------------
+icd9_concepts <- concepts_vocabulary |> 
+  filter(vocabulary_id == "ICD9CM")
+
+```
+
+```{r}
+# diagnoses codes------------------------------------------------------------
+map_diagnoses_icd9_to_concept_id_0 <- codigos_maestro_diagnoses_1 |>
+  filter(tipo_codigo == "ICD9CM") |> 
+  distinct(diag_cod) |> 
+  arrange(diag_cod)  |> 
+  left_join(icd9_concepts, by = c("diag_cod" = "concept_code"))
+
+# check
+wrong_diagnoses_icd9_codes <- map_diagnoses_icd9_to_concept_id_0 |>
+  select(diag_cod, concept_id) |> 
+  filter(is.na(concept_id)) |>
+  select(-concept_id) |> 
+  mutate(.before = 1, issue = if_else(str_detect(diag_cod, "\\d[aA-zZ]"), 
+                         "letter at the end", "non-existent code")) |> 
+  arrange(issue, diag_cod)
+
+```
+
+```{r}
+# fix the unmapped codes-----------------------------------------------------
+wrong_diagnoses_icd9_codes_corrected <- wrong_diagnoses_icd9_codes |> 
+  mutate(diag_cod_cleaned = case_when(
+  # remove the last letter for CV specification
+  str_detect(diag_cod, "\\d[aA-zZ]") == TRUE ~ 
+    str_sub(diag_cod, 1, nchar(diag_cod) -1),
+  # correct errors
+  diag_cod == "712.0"   ~ "712",
+  diag_cod == "712.04"  ~ "712",
+  diag_cod == "712.07"  ~ "712",
+  diag_cod == "712.08"  ~ "712",
+  diag_cod == "712.09"  ~ "712",
+  diag_cod == "715.99"  ~ "715.9",
+  # change place (E849) for unespecified place (E849.9)
+  diag_cod == "E849"  ~ "E849.9",
+  T ~ diag_cod
+    ))
+
+saveRDS(wrong_diagnoses_icd9_codes_corrected, file.path("Resultados", "icd_issues",
+                               "wrong_diagnoses_icd9_codes_corrected.RDS"))
+
+```
+
+<br>
+
+```{r}
+#| eval: true
+#| echo: false
+#| tbl-cap-location: top
+#| tbl-cap: "ICD9CM Code Issues in DIAGNOSES Table"
+#| label: tbl-diagicd9issues
+
+# table of the wrong codes and the proposed fix------------------------------
+wrong_diagnoses_icd9_codes_corrected <- readRDS(file.path("Resultados", "icd_issues",
+                               "wrong_diagnoses_icd9_codes_corrected.RDS"))
+
+wrong_diagnoses_icd9_codes_corrected |>
+  gt(id = "diagicd9") |>  # need to name the table to apply CSS
+  fmt_markdown(columns = everything()) |> 
+  cols_label(issue = "Issue",
+             diag_cod = "Original code",
+             diag_cod_cleaned = "Corrected code"
+             )|> 
+  tab_style(
+    style = list(
+      cell_fill(color = "#9473d8"),
+      cell_text(color = "white", align = "center", weight = "bold")
+    ),
+    locations = cells_column_labels()) |>
+  cols_align(
+  align = "center",
+  columns = everything()) |> 
+    opt_row_striping( row_striping = TRUE) |>
+  tab_options(
+    container.height = "400px"
+  ) |>  
+  opt_css(
+    css = "
+    #diagicd9 tr:hover {
+    background-color: #f2cce4;
+    }
+    ")
+
+```
+
+<br>
+
+
+```{r}
+# fix the unmapped codes in the diag table------------------------------------
+codigos_maestro_diagnoses_2 <- codigos_maestro_diagnoses_1 |> 
+  left_join(wrong_diagnoses_icd9_codes_corrected |> 
+              mutate(tipo_codigo = "ICD9CM")) |>
+  select(-issue) |> 
+  tidylog::distinct()
+
+```
+
+
+```{r}
+# map again with the corrected codes-----------------------------------------
+map_diagnoses_icd9_to_concept_id <- codigos_maestro_diagnoses_2 |>
+  filter(tipo_codigo == "ICD9CM") |>
+  mutate(diag_cod = if_else(!is.na(diag_cod_cleaned),
+                            diag_cod_cleaned, diag_cod)) |> 
+  select(-diag_cod_cleaned) |>
+  distinct(diag_cod) |> 
+  arrange(diag_cod) |> 
+  left_join(icd9_concepts, by = c("diag_cod" = "concept_code"))
+
+# check
+map_diagnoses_icd9_to_concept_id |>
+  select(diag_cod, concept_id) |> 
+  filter(is.na(concept_id))
+## all is mapped -> OK
+
+```
+
+## Correct ICD10ES codes
+
+```{r}
+# obtain icd9 concepts vocabulary--------------------------------------------
+icd10_concepts <- concepts_vocabulary |> 
+  filter(vocabulary_id == "ICD10CM")
+
+```
+
+```{r}
+# diag codes------------------------------------------------------------------
+map_diagnoses_icd10_to_concept_id_0 <- codigos_maestro_diagnoses_2 |>
+  filter(tipo_codigo == "ICD10ES") |> 
+  distinct(diag_cod) |> 
+  arrange(diag_cod)  |> 
+  left_join(icd10_concepts, by = c("diag_cod" = "concept_code"))
+
+# check
+wrong_diagnoses_icd10_codes <- map_diagnoses_icd10_to_concept_id_0 |>
+  select(diag_cod, concept_id) |> 
+  filter(is.na(concept_id)) |>
+  select(-concept_id) |> 
+  mutate(.before = 1, issue = if_else(str_detect(diag_cod, "\\d?[aA-zZ]"), 
+                         "letter at the end", "non-existent code")) |> 
+  arrange(issue, diag_cod)
+
+```
+
+
+```{r}
+# check the fix
+codigos_maestro_diagnoses_2 |>
+  filter(tipo_codigo == "ICD10ES") |> 
+  distinct(diag_cod) |>
+  filter(diag_cod %in% (wrong_diagnoses_icd10_codes |> pull(diag_cod))) |> 
+  arrange(diag_cod) |> 
+  mutate(diag_cod_cleaned = str_remove(diag_cod, "(X{1,3}|\\.[X]{1,3})$"))
+
+# the fix is correct
+
+```
+
+
+```{r}
+# fix the unmapped codes-----------------------------------------------------
+wrong_diagnoses_icd10_codes_corrected <- wrong_diagnoses_icd10_codes |> 
+  mutate(diag_cod_cleaned = str_remove(diag_cod, "(X{1,3}|\\.[X]{1,3})$"))
+
+saveRDS(wrong_diagnoses_icd10_codes_corrected, file.path("Resultados", 
+        "icd_issues", "wrong_diagnoses_icd10_codes_corrected.RDS"))
+
+```
+
+<br>
+
+```{r}
+#| eval: true
+#| echo: false
+#| tbl-cap-location: top
+#| tbl-cap: "ICD10CM Code Issues in DIAGNOSES Table"
+#| label: tbl-diagicd10issues
+
+# table of the wrong codes and the proposed fix------------------------------
+wrong_diagnoses_icd10_codes_corrected <- readRDS(file.path("Resultados", "icd_issues",
+                               "wrong_diagnoses_icd10_codes_corrected.RDS"))
+
+wrong_diagnoses_icd10_codes_corrected |>
+  gt(id = "diagicd10") |>  # need to name the table to apply CSS
+  fmt_markdown(columns = everything()) |> 
+  cols_label(issue = "Issue",
+             diag_cod = "Original code",
+             diag_cod_cleaned = "Corrected code"
+             )|> 
+  tab_style(
+    style = list(
+      cell_fill(color = "#9473d8"),
+      cell_text(color = "white", align = "center", weight = "bold")
+    ),
+    locations = cells_column_labels()) |>
+  cols_align(
+  align = "center",
+  columns = everything()) |> 
+    opt_row_striping( row_striping = TRUE) |>
+  tab_options(
+    container.height = "400px"
+  ) |>  
+  opt_css(
+    css = "
+    #diagicd10 tr:hover {
+    background-color: #f2cce4;
+    }
+    ")
+
+```
+
+<br>
+
+```{r}
+# fix the unmapped codes in the diagnoses table------------------------------
+codigos_maestro_diagnoses_3 <- codigos_maestro_diagnoses_2 |> 
+  left_join(wrong_diagnoses_icd10_codes_corrected |> 
+              mutate(tipo_codigo = "ICD10ES"), 
+            by = c("diag_cod", "tipo_codigo")) |>
+  tidylog::distinct() |> 
+  mutate(diag_cod_cleaned = if_else(
+    !is.na(diag_cod_cleaned.x), diag_cod_cleaned.x, diag_cod_cleaned.y)) |> 
+  select(-diag_cod_cleaned.x, -diag_cod_cleaned.y, -issue)
+
+```
+
+
+```{r}
+# map again with the corrected codes-----------------------------------------
+map_diagnoses_icd10_to_concept_id <- codigos_maestro_diagnoses_3 |>
+  filter(tipo_codigo == "ICD10ES") |>
+  mutate(diag_cod = if_else(!is.na(diag_cod_cleaned),
+                            diag_cod_cleaned, diag_cod)) |>
+  select(-diag_cod_cleaned) |> 
+  arrange(diag_cod) |> 
+  left_join(icd10_concepts, by = c("diag_cod" = "concept_code"))
+
+# check
+map_diagnoses_icd10_to_concept_id |>
+  select(diag_cod, concept_id) |> 
+  filter(is.na(concept_id))
+## all is mapped -> OK
+
+```
+
+# Include tipo_codigo into diagnoses
+
+```{r}
+# add tipo_codigo and corrected codes----------------------------------------
+diagnoses_2 <- diagnoses_1 |> 
+  # add tipo_codigo1
+  left_join(codigos_maestro_diagnoses_3, 
+            by = c("diag_cod" = "diag_cod", 
+                   "diag_desc" = "diag_desc")) |>
+  mutate(diag_cod = if_else(!is.na(diag_cod_cleaned),
+                            diag_cod_cleaned, diag_cod)) 
+# check
+diagnoses_2 |> count(tipo_codigo)
+
+```
+
+# Fix bases with the feedback from the Quality Checks
+
+Note that we are using the *tidylog* variation of *tidyverse* verbs in order to obtain more information about the curation process.
+
+```{r}
+# depure base from QC feedback-----------------------------------------------
+diagnoses <- diagnoses_2 |> 
+  tidylog::filter(is.na(fecha_desact) | fecha_desact >= ymd("2018-01-01")) |> 
+  # remove missing sip (RFqwh4PcfAcSBlICoKtN/w==)
+  tidylog::filter(sip != "RFqwh4PcfAcSBlICoKtN/w==") |> 
+  # check duplicates
+  tidylog::distinct()
+
+```
+
+# Save base
+
+```{r}
+# write table----------------------------------------------------------------
+
+# save in SSD
+fwrite(diagnoses, append = FALSE, 
+       file = file.path("Origin_tables", "diagnoses.csv"))
+# save in CERES
+fwrite(diagnoses, file.path(procesados, "diagnoses.csv"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_06_DIAGNOSES_curation_CONSIGN.qmd"))
+file.copy(from = file.path("1_06_DIAGNOSES_curation_CONSIGN.qmd"),
+          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

@@ -82,7 +82,7 @@ SELECT co.PERSON_ID
     ,co.CONDITION_START_DATE
     ,COALESCE(co.CONDITION_END_DATE, DATEADD(day, 1, CONDITION_START_DATE)) AS CONDITION_END_DATE
 INTO #cteConditionTarget
-FROM postgres.vid_consign.CONDITION_OCCURRENCE co;
+FROM postgres2.vid_consign.CONDITION_OCCURRENCE co;
 
 /* / */
 
@@ -177,7 +177,7 @@ GROUP BY c.PERSON_ID
 
 /* / */
 
-INSERT INTO postgres.vid_consign.condition_era (
+INSERT INTO postgres2.vid_consign.condition_era (
     condition_era_id
     ,person_id
     ,condition_concept_id

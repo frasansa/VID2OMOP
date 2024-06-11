@@ -42,16 +42,18 @@ overflow-y: scroll;
 
 ```{r}
 # load pathes----------------------------------------------------------------
-path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+path_origenes_consign <- file.path( "r:", "CONSIGN_SD2270", 
                                     "1-DATOS", "1-BRUTOS")
-procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", "1-DATOS", 
+procesados_consign <- file.path( "r:", "CONSIGN_SD2270", "1-DATOS", 
+                                  "3-PROCESADOS")
+procesados_pregval <- file.path( "r:", "PREGVAL", "1-DATOS", 
                                   "3-PROCESADOS")
 
 ```
 
 ```{r}
 # check names----------------------------------------------------------------
-table_sample <- fread(file.path(path_origenes_consign, "01_SIP", "ext2", "V99",
+table_sample <- fread(file.path(path_origenes_consign, "01_SIP", "ext2", "V2",
             "SD2270_SIP_SPO_4464_CONSIGN_V2_2018_out.enc.txt"),
                nrows = 100) |> clean_names()
 
@@ -136,22 +138,22 @@ clean_sip_2018_2021 <- function(x, fecha_calculo){
 ```{r}
 # load bases-----------------------------------------------------------------
 sip_2018 <- clean_sip_2018_2021(file.path(path_origenes_consign, 
-                                            "01_SIP", "ext2", "V99",
+                                            "01_SIP", "ext2", "V2",
             "SD2270_SIP_SPO_4464_CONSIGN_V2_2018_out.enc.txt"),
             fecha_calculo = "2018-12-31") 
 
 sip_2019 <- clean_sip_2018_2021(file.path(path_origenes_consign, 
-                                            "01_SIP", "ext2", "V99",
+                                            "01_SIP", "ext2", "V2",
             "SD2270_SIP_SPO_4464_CONSIGN_V2_2019_out.enc.txt"),
             fecha_calculo = "2019-12-31") 
 
 sip_2020 <- clean_sip_2018_2021(file.path(path_origenes_consign, 
-                                            "01_SIP", "ext2", "V99",
+                                            "01_SIP", "ext2", "V2",
             "SD2270_SIP_SPO_4464_CONSIGN_V2_2020_out.enc.txt"),
             fecha_calculo = "2020-12-31") 
 
 sip_2021 <- clean_sip_2018_2021(file.path(path_origenes_consign,  
-                                            "01_SIP", "ext2", "V99",
+                                            "01_SIP", "ext2", "V2",
             "SD2270_SIP_SPO_4464_CONSIGN_V2_2021_out.enc.txt"),
             fecha_calculo = "2021-12-31")
 
@@ -205,7 +207,12 @@ sip_1 <- sip_2018_2021 |>
                           fecha_baja, fecha_defuncion),
   # replace some erroneous deregistration dates with the death date
          fecha_baja = pmin(fecha_defuncion, fecha_baja, na.rm = TRUE)) 
-  
+
+# check categories of causa_baja with "FALLE" pattern------------------------
+sip |> 
+  filter(str_detect(causa_baja, "FALLE") == TRUE) |> 
+  count(causa_baja)
+
 ```
 
 ```{r}
@@ -217,7 +224,7 @@ sip_variables_fijas <- sip_1 |>
   slice(which.max(fecha_calculo)) |> 
   select(-fecha_calculo)
 
-sip <- sip_1 |> 
+sip_2 <- sip_1 |> 
   select(-c(fecha_nacimiento, fecha_defuncion, pais_nacimiento)) |> 
   left_join(sip_variables_fijas) |> 
   # relocate variables
@@ -248,12 +255,30 @@ sip <- sip_1 |>
 
 ```
 
+```{r}
+# TO DO
+# remove persons with fecha_defuncion < fecha_inicio-------------------------
+# sip <- sip_2 |> 
+#   tidylog::filter(is.na(fecha_defuncion) | 
+#                  year(fecha_defuncion) >= year(fecha_calculo) )
+# 
+# 
+# sip_2 |> tidylog::filter(
+#                  year(fecha_defuncion) < year(fecha_calculo) ) |> 
+#   select(fecha_calculo, fecha_alta, fecha_baja, fecha_defuncion)
+
+sip <- sip_2
+
+```
+
+
 
 ```{r}
 # check the updating of constant vars----------------------------------------
 sip |> distinct(sip) |> nrow()
 sip |> distinct(sip, fecha_nacimiento, pais_nacimiento, fecha_defuncion) |>
   nrow()
+
 
 ```
 
@@ -264,7 +289,7 @@ sip |> distinct(sip, fecha_nacimiento, pais_nacimiento, fecha_defuncion) |>
 # save in SSD
 fwrite(sip, file.path("Origin_tables", "sip.csv"))
 # save in CERES
-fwrite(sip, file.path(procesados, "sip.csv"))
+fwrite(sip, file.path(procesados_consign, "sip.csv"))
 
 
 ```
@@ -273,6 +298,7 @@ fwrite(sip, file.path(procesados, "sip.csv"))
 # save source population-----------------------------------------------------
 sips_consign <- sip |> distinct(sip) |> pull()
 saveRDS(sips_consign, file.path("Resultados", "sips", "sips_consign.RDS"))
+saveRDS(sips_consign, file.path(procesados_pregval, "sips", "sips_consign.RDS"))
 
 ```
 

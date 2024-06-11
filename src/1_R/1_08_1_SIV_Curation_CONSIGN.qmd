@@ -216,11 +216,11 @@ siv_clinical_drugs_tipo_english <- siv_clinical_drugs_tipo |>
 
 ```{r}
 # load concepts vocabulary---------------------------------------------------
-concepts_vocabulary <- fread(file.path("..", "EHDEN",  "Vocabularies2", 
+concepts_vocabulary <- fread(file.path("..", "EHDEN",  "Vocabularies3", 
                                        "CONCEPT.csv"))
-concepts_relationship <- fread(file.path("..", "EHDEN",  "Vocabularies2", 
+concepts_relationship <- fread(file.path("..", "EHDEN",  "Vocabularies3", 
                                          "CONCEPT_RELATIONSHIP.csv"))
-concepts_ancestor <- fread(file.path("..", "EHDEN",  "Vocabularies2", 
+concepts_ancestor <- fread(file.path("..", "EHDEN",  "Vocabularies3", 
                                      "CONCEPT_ANCESTOR.csv"))
 
 ```
@@ -335,7 +335,7 @@ siv_type_cvx <- siv_clinical_drugs_tipo |>
   # RAB",
   "rabies vaccine, unspecified formulation",
   # ROTAV",
-  "rotavirus vaccine, unspecified formulation	",
+  "rotavirus vaccine, unspecified formulation",
   # RUB",
   "measles, mumps and rubella virus vaccine",
   # SAR",

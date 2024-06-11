@@ -1,0 +1,134 @@
+---
+title: "CONSIGN: GAIA Curation. Part V"
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+knitr::opts_chunk$set(
+  eval = FALSE
+)
+
+```
+
+```{r }
+#| eval: true
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load and clean bases
+
+```{r}
+# load pathes----------------------------------------------------------------
+path_origenes_consign <- file.path( "r:", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "r:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+```{r}
+# read gaia_clinical_drugs5--------------------------------------------------
+gaia_clinical_drugs5 <- fread(file.path("Resultados", "gaia_masters",
+                          "gaia_clinical_drugs5.csv"), encoding = "Latin-1")
+
+```
+
+```{r}
+# load concepts vocabulary---------------------------------------------------
+concepts_vocabulary <- fread(file.path("..", "EHDEN",
+  "Vocabularies", "CONCEPT.csv"))
+concepts_relationship <- fread(file.path("..", "EHDEN",
+  "Vocabularies", "CONCEPT_RELATIONSHIP.csv"))
+concepts_ancestor <- fread(file.path("..", "EHDEN",
+  "Vocabularies", "CONCEPT_ANCESTOR.csv"))
+
+```
+
+# Create file to use with usagi
+
+```{r}
+# observe Clinical Drug format-----------------------------------------------
+concepts_vocabulary |> filter(concept_class_id == "Clinical Drug Box")
+
+```
+
+
+
+```{r}
+# read gaia for obtaining frequency------------------------------------------
+gaia <- fread(file.path("Origin_tables", "gaia.csv"))
+
+gaia_freq <- gaia |> count(pres_farma_cod, sort = TRUE, name = "frequency")
+
+```
+
+```{r}
+# # USAGI OLD
+# # create and save usagi_gaia-------------------------------------------------
+# usagi_gaia <- gaia_clinical_drugs5 |> 
+#   count(pres_farma_cod, pres_farma_desc)
+# 
+# usagi_gaia_sin_barra <- gaia_clinical_drugs5 |> 
+#   count(pres_farma_cod, pres_farma_desc) |> 
+#   mutate(pres_farma_desc = str_remove_all(pres_farma_desc, "/"))
+# 
+# 
+# fwrite(usagi_gaia, file.path("Resultados", "gaia_masters", "usagi", 
+#                              "old", "usagi_gaia.csv"))
+# fwrite(usagi_gaia_sin_barra, file.path("Resultados", "gaia_masters", "usagi",
+#                              "old", "usagi_gaia_sin_barra.csv"))
+
+```
+
+```{r}
+# usagi input file-----------------------------------------------------------
+gaia_usagi <- gaia_clinical_drugs5 |> 
+  mutate(pres_farma_desc2 = str_replace_all(pres_farma_desc, ",", "\\.")) |> 
+  mutate(dose = str_extract(pres_farma_desc2, "\\d+")) |> 
+  mutate(dose_unit = str_extract(pres_farma_desc2, paste0(dose, "\\s+(\\w+)"))) |> 
+  mutate(usagi_definition = glue("{prin_act_desc_english} {dose_unit} {form} box of {nforma}")) |> 
+  select(pres_farma_cod, pres_farma_desc, usagi_definition) |> 
+  left_join(gaia_freq, by = "pres_farma_cod") |> 
+  arrange(desc(frequency))
+
+fwrite(gaia_usagi, file.path("Resultados", "gaia_masters", "usagi",
+                              "gaia_usagi.csv"))
+
+```
+
+```{r}
+#| include: false
+# copy .qmd to CERES---------------------------------------------------------
+unlink(file.path("r:", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+                 "1_07_6_GAIA_USAGI_CONSIGN.qmd"))
+file.copy(from = file.path("1_07_6_GAIA_USAGI_CONSIGN.qmd"),
+          to = file.path("r:", "CONSIGN_SD2270",
+                         "2-SCRIPTS", "R"))
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

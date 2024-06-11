@@ -1,0 +1,129 @@
+---
+title: "CONSIGN: AED Curation."
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+```
+
+```{r }
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load bases and rename variables
+
+```{r}
+# load pathes-----------------------------------------------------------------
+path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                                    "1-DATOS", "1-BRUTOS")
+
+procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+                         "1-DATOS", "3-PROCESADOS")
+
+```
+
+```{r}
+# cargar_bases-----------------------------------------------------------------
+eos_0 <- fread(file.path(path_origenes_consign, 
+             "11_EOS", "ext2", "V99",
+            "SD2270_hojaEmba.enc.enc.txt")) |> 
+  # cambiar a minúsculas  
+  clean_names("snake") |>
+  rename(sip = paci_sip,
+         embarazo_id = obstemba_key,
+         fecha_fin_emb = c26_fech_finaliza,
+         semana_gest = c27_edad_gest,
+         resultado_rn1 = c28_resultado_1,
+         resultado_rn2 = c28_resultado_2,
+         resultado_rn3 = c28_resultado_3,
+         fecha_visita = c29_fecha_visita_emb
+         ) |> 
+  mutate(fecha_fin_emb = dmy(fecha_fin_emb),
+         fecha_visita = dmy(fecha_visita))
+
+```
+
+# Save auxiliar base eos_0
+
+```{r write_eos_0, echo=FALSE, message=FALSE, warning=FALSE}
+# write table------------------------------------------------------------------
+fwrite(eos_0, append = FALSE, file = file.path("Origin_tables",
+                                             "auxiliar", "eos_0.csv"))
+
+```
+
+# Clean eos
+
+```{r, warning = FALSE}
+eos_1 <- eos_0 |> 
+  group_by(sip, embarazo_id) |>
+  summarise(fecha_fin_emb = max(fecha_fin_emb, na.rm = TRUE),
+            semana_gest = max(semana_gest),
+            resultado_rn1 = last(resultado_rn1),
+            resultado_rn2 = last(resultado_rn2),
+            resultado_rn3 = last(resultado_rn3),
+            .groups = "drop")
+
+eos_1 |> count(semana_gest)
+
+eos <- eos_1 |> mutate(across(c(resultado_rn1, resultado_rn2, resultado_rn3),
+                ~case_when(
+    . == "Aborto" ~ "miscarriage",
+    . == "Muerte fetal" ~ "stillbirth",
+    . == "RN Vivo" ~ "livebirth",
+    T ~ NA_character_
+  ))) |> 
+  mutate(multiple_pregnancy = case_when(
+    !is.na(resultado_rn3) ~ "triplets",
+    !is.na(resultado_rn2) ~ "twins",
+    !is.na(resultado_rn1) ~ "singleton",
+    T ~ NA_character_)
+  ) |> 
+  mutate(semana_gest = if_else(semana_gest < 3 | semana_gest > 45, 
+                               NA_integer_, semana_gest))
+
+eos |> count(semana_gest)
+eos |> count(sip, sort = TRUE)
+
+# En los embarazos múltiples puede que el tipo de fin de embarazo sea distinto
+eos |> filter(multiple_pregnancy != "singleton") |> 
+  filter(resultado_rn1 != resultado_rn2)
+eos |> filter(multiple_pregnancy != "singleton") |> 
+  filter(resultado_rn1 != resultado_rn3)
+eos |> filter(multiple_pregnancy != "singleton") |> 
+  filter(resultado_rn2 != resultado_rn3)
+
+```
+
+# Save base
+
+```{r write_eos, echo=FALSE, message=FALSE, warning=FALSE}
+# write table------------------------------------------------------------------
+fwrite(eos, append = FALSE, file = file.path("Origin_tables",
+                                             "eos.csv"))
+
+```
+

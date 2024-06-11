@@ -48,6 +48,10 @@ path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270",
 procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
                          "1-DATOS", "3-PROCESADOS")
 
+# load population------------------------------------------------------------
+sips_consign <- readRDS(file.path("..", "consign", "Resultados", "sips",
+                                  "sips_consign.RDS"))
+
 ```
 
 ```{r}

@@ -1,0 +1,94 @@
+---
+title: "CONSIGN: TESTS Curation."
+author: "Francisco Sanchez-Saez"
+date: "last-modified" 
+editor: source
+format:
+  html:
+    toc: true
+    toc-location: left
+    theme: cerulean
+    css: style.css
+    embed-resources: true
+    number-sections: true
+---
+
+```{r}
+#| echo: false
+source("_common.R")
+
+```
+
+```{r }
+#| include: false
+# load libraries and functions------------------------------------------------
+source(file.path("..", "scripts", "Librerias.R"))
+source(file.path("..", "scripts", "Funciones.R"))
+
+```
+
+```{css, echo = FALSE}
+.output {
+max-height: 500px;
+overflow-y: scroll;
+}
+```
+
+# Load bases and rename variables
+
+```{r}
+# Load pathes----------------------------------------------------------------
+brutos_pregval      <- file.path( "r:", "PREGVAL", "1-DATOS", 
+                          "1-BRUTOS")
+intermedios_pregval <- file.path( "r:", "PREGVAL", "1-DATOS", 
+                          "2-INTERMEDIOS")
+procesados_pregval  <- file.path( "r:", "PREGVAL", "1-DATOS", 
+                          "3-PROCESADOS")
+
+```
+
+```{r}
+# Define folder to save the parquet files------------------------------------
+path_to_save_tests <- file.path(procesados_pregval, "12_TESTS", "12j_TESTS")
+
+```
+
+```{r}
+# Read pres in parquet format------------------------------------------------
+tests_pq <- open_dataset(path_to_save_tests)
+
+# proof some functions in pq file
+tests_pq |> 
+  count(year_fecha) |> 
+  arrange(year_fecha) |> 
+  collect() 
+
+tests_pq |> head(10) |> collect()
+
+```
+
+
+```{r}
+# adapt tests to the consign-------------------------------------------------
+sips_consign <- readRDS(file.path(procesados, "sips", "sips_consign.RDS"))
+
+tests_consign <- tests_pq |>
+  collect() |> 
+  tidylog::filter(year_fecha %in% c(2018:2021)) |> 
+  tidylog::filter(sip %in% sips_consign) 
+
+tests_consign |> distinct(sip)
+
+tests_consign |> count(descripcion)
+
+```
+
+# Save tests_consign
+
+```{r}
+# save the tests-------------------------------------------------------------
+fwrite(tests_consign, file.path("Origin_tables", "tests.csv"))
+
+```
+
+
