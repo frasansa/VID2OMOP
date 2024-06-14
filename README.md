@@ -192,8 +192,6 @@ It is possible to reopen the Atlas local following the next steps.
 
 - Run the Achilles tool (<https://github.com/OHDSI/Achilles>).
 
-- Run the DataQualityDashboard tool (<https://github.com/OHDSI/DataQualityDashboard>).
-
 ### 2. Deploy a Local Atlas Instance
 
 - Delete the "C:\tomcat\webapps\WebAPI.war" file.
@@ -229,6 +227,13 @@ It is possible to reopen the Atlas local following the next steps.
 - Check that everything is OK at <http://localhost:8080/WebAPI/source/refresh>.
 
 - Check that everything is OK at <http://localhost:8080/Atlas>.
+
+### 3. Run the tools
+
+- Run the DataQualityDashboard tool (<https://github.com/OHDSI/DataQualityDashboard>).
+- Run the catalogueexport tool (<https://github.com/EHDEN/CatalogueExport>)
+- Run the cdmonboarding tool (<https://github.com/darwin-eu/CdmOnboarding>)
+- Run the dashboardexport tool (<https://github.com/darwin-eu/DashboardExport>) 
 
 ## License
 
