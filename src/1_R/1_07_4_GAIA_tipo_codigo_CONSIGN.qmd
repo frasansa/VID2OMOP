@@ -38,20 +38,22 @@ overflow-y: scroll;
 }
 ```
 
-# Load and clean bases
+# Load pathes
 
 ```{r}
 # load pathes-----------------------------------------------------------------
-path_origenes_consign <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+origenes <- file.path( "r:", "CONSIGN_SD2270", 
                                     "1-DATOS", "1-BRUTOS")
 
-procesados <- file.path( "F:", "CERES2", "CONSIGN_SD2270", 
+procesados <- file.path( "r:", "CONSIGN_SD2270", 
                          "1-DATOS", "3-PROCESADOS")
 
 ```
 
+# Load and clean bases
+
 ```{r}
-# V3
+# V3-------------------------------------------------------------------------
 gaia_v3_cleaned <- fread(file.path("Origin_tables", "auxiliar", 
                                    "gaia_v3_cleaned.csv"),
                          encoding = "Latin-1")
@@ -678,7 +680,7 @@ gaia_3 <- gaia_2 |>
 
 ```{r}
 # depure base from QC feedback-----------------------------------------------
-gaia_non_standard <- gaia_3 |> 
+gaia <- gaia_3 |> 
   # select CONSIGN study period
   tidylog::filter(fecha_receta <= ymd("2021-12-31")) |> 
   # remove missing sip (RFqwh4PcfAcSBlICoKtN/w==)
@@ -687,13 +689,13 @@ gaia_non_standard <- gaia_3 |>
   tidylog::distinct()
 
 # check gaia dates
-gaia_non_standard |> skim(fecha_receta, fecha_pres, fecha_disp, fecha_fact)
+gaia |> skim(fecha_receta, fecha_pres, fecha_disp, fecha_fact)
 
 ```
 
 ```{r}
 # create master of clinical drugs--------------------------------------------
-gaia_clinical_drugs <- gaia_non_standard |> distinct(
+gaia_clinical_drugs <- gaia |> distinct(
   pres_farma_cod,
   pres_farma_desc,
   atc_cod,
@@ -714,21 +716,25 @@ fwrite(gaia_clinical_drugs, file.path("Resultados", "gaia_masters",
 
 ```{r}
 # save gaia------------------------------------------------------------------
+fwrite(gaia, append = FALSE, 
+       file = file.path("Origin_tables", "gaia.csv"))
 
-# save in SSD
-fwrite(gaia_non_standard, append = FALSE, 
-       file = file.path("Origin_tables", "auxiliar",
-                "gaia_non_standard.csv"))
+```
+
+```{r}
+# check gaia------------------------------------------------------------------
+gaia <- fread(file = file.path("Origin_tables", "gaia.csv"),
+encoding = "Latin-1")
 
 ```
 
 ```{r}
 #| include: false
 # copy .qmd to CERES---------------------------------------------------------
-unlink(file.path("F:", "CERES2", "CONSIGN_SD2270", "2-SCRIPTS", "R",
+unlink(file.path("R:", "CONSIGN_SD2270", "2-SCRIPTS", "R",
                  "1_07_4_GAIA_tipo_codigo_CONSIGN.qmd"))
 file.copy(from = file.path("1_07_4_GAIA_tipo_codigo_CONSIGN.qmd"),
-          to = file.path("F:", "CERES2", "CONSIGN_SD2270",
+          to = file.path("R:", "CONSIGN_SD2270",
                          "2-SCRIPTS", "R"))
 
 ```

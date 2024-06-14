@@ -428,6 +428,55 @@ fwrite(from_condition_occurrence_vid_0_to_measurement,
 
 # drug exposure
 
+## Check duration of cgrp 
+
+In this instance, the cgrp antagonists are drugs of interest, so will be checked. For all presentations the *sig* should be 1 form every 720 hours with a duration of 30 days or 90 days for the 3 syringe presentation. 
+
+```{r}
+# list of antimigrain cgrp antagonists drug_concept_id-----------------------
+anti_migrain_drug_concept_id <- c(
+  36810453, #	ERENUMAB 70 MG EN 1 ML / 1 SOLUCION INYECTABLE (EXTRANJERO)	N02CX07	
+  36809193, #	ERENUMAB 70 MG EN 1 ML / 1 PLUMA PREGARGADA DE 1 ML	N02CD01	
+  36054483, #	ERENUMAB 140 MG EN 1 ML / 1 PLUMA PREGARGADA DE 1 ML	N02CD01	
+  36054325, #	GALCANEZUMAB 120 MG EN 1 ML / 1 PLUMA PREGARGADA DE 1 ML	N02CD02	
+  1396809, # 	GALCANEZUMAB 100 MG / 1 SOLUCION INYECTABLE (EXTARNJERO)	N02CX08	
+  36054041, #	FREMANEZUMAB 225 MG EN 1,5 ML / 1 JERINGA/PLUMA PRECARGADA DE 1,5 ML	N02CD03	
+  2911352) # FREMANEZUMAB 225 MG EN 1,5 ML / 3 SOLUCION INYECTABLE DE 1,5 ML)
+
+```
+
+
+```{r}
+# enhance mapping of cgrp----------------------------------------------------
+drug_exposure_vid_0_cgrp <- drug_exposure_vid_0 |>
+  mutate(drug_exposure_end_date = ymd(drug_exposure_end_date),
+         drug_exposure_start_date = ymd(drug_exposure_start_date)) |> 
+  mutate(sig = if_else(drug_concept_id %in% anti_migrain_drug_concept_id,
+                       glue("1 form(s) each 720 hours"), sig),
+         days_supply = if_else(drug_concept_id %in% anti_migrain_drug_concept_id,
+                       30, days_supply),
+         drug_exposure_end_date = if_else(drug_concept_id %in% 
+                                            anti_migrain_drug_concept_id,
+      drug_exposure_start_date %m+% days(30), drug_exposure_end_date)) |> 
+  mutate(
+     days_supply = if_else(drug_concept_id == 2911352,
+                       90, days_supply),
+     drug_exposure_end_date = if_else(drug_concept_id == 2911352,
+      drug_exposure_start_date %m+% days(90), drug_exposure_end_date),
+     drug_exposure_end_datetime = drug_exposure_end_date) 
+
+```
+
+```{r}
+# check enhancing------------------------------------------------------------
+drug_exposure_vid_0_cgrp |> 
+  filter(drug_concept_id %in% anti_migrain_drug_concept_id)
+
+# COMMENTS: 
+
+```
+
+
 ## From drug_exposure_vid_0 to drug_exposure
 
 ```{r}
@@ -442,15 +491,17 @@ drug_drug_exposure_concept_ids <- concepts_vocabulary |>
 
 ```{r}
 # check unmaped concepts------------------------------------------------------
-drug_exposure_vid_0 |> 
-  filter(drug_concept_id == 0)
-# PERFECT 
+unmapped_pres_farma_codes <- drug_exposure_vid_0_cgrp |> 
+  filter(drug_concept_id == 0) |> 
+  distinct(drug_source_value) |> 
+  pull()
+# COMMENTS: 0 --> Perfect
 
 ```
 
 ```{r}
 # from_drug_exposure_vid_0_to_drug_exposure---------------------------------
-from_drug_exposure_vid_0_to_drug_exposure <- drug_exposure_vid_0 |>
+from_drug_exposure_vid_0_to_drug_exposure <- drug_exposure_vid_0_cgrp |>
   filter(drug_concept_id %in% drug_drug_exposure_concept_ids) |>
   arrange(drug_exposure_id) |> 
   mutate(
@@ -783,7 +834,7 @@ stcm_route <- concepts_relationship_route |>
 # load usagi stcm for clinical drug codes------------------------------------
 gaia_exported_stcm <- fread(file.path("..", "Consign", "Resultados",
                          "gaia_masters", "usagi", 
-"gaia_exported_stcm_2024_06_11.csv")) |> 
+"gaia_exported_stcm_2024_06_12.csv")) |> 
   # change dates to integer
   mutate(valid_start_date = as.integer(19700101)) |> 
   mutate(valid_end_date = as.integer(20991231)) |> 
@@ -839,6 +890,11 @@ source_to_concept_map_vid |> count(source_vocabulary_id)
 fwrite(source_to_concept_map_vid, file.path("Target_tables",
                                    "source_to_concept_map_vid.csv"))
 
+```
+
+
+```{r}
+# check stcm
 source_to_concept_map_vid |> count(source_vocabulary_id)
 
 concepts_vocabulary |> 

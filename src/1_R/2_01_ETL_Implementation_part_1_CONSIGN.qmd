@@ -1953,7 +1953,7 @@ gaia_clinical_drugs5 <- fread(file.path("..", "Consign", "Resultados",
 # load usagi stcm for unmaped codes-----------------------------------------
 gaia_exported_stcm <- fread(file.path("..", "Consign", "Resultados",
                          "gaia_masters", "usagi", 
-"gaia_exported_stcm_2024_06_11.csv"))
+"gaia_exported_stcm_2024_06_12.csv"))
 
 ```
 
@@ -2051,132 +2051,132 @@ fwrite(concepts_relationship_route, file.path("Target_tables",
 
 
 ```{r}
-# gaia drug_concept_id (atc level) mapping-----------------------------------
-atc_concepts <- concepts_vocabulary |> 
-  filter(concept_code %in% (gaia_clinical_drugs5 |> 
-                              distinct(atc_cod) |>  pull()))
-
-atc_concept_codes <- atc_concepts |> 
-  distinct(concept_id) |> pull()
-
-missing_presentations <- gaia_clinical_drugs5 |> 
- anti_join(atc_concepts, by = c(atc_cod = "concept_code")) 
-
-missing_atc_cod_desc <- missing_presentations |> 
-  distinct(atc_cod, atc_desc) |> 
-  arrange(atc_cod)
-
-missing_atc_source_codes <- missing_atc_cod_desc |> pull(atc_cod)
-
-```
-
-
-```{r}
-# search manually atc unmaped codes------------------------------------------
-unmpaded_atc_codes_to_standard <- standards_concepts |> 
-  # "A10BB91" GLISENTIDA
-  filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "GLISENTIDE")) |> union(
-# "C01BA92" HIDROQUINIDINA
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "hydroquinidine"))) |> union(
-# "C01BB91" FENITOINA
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "^phenytoin"))) |> union(
-# "C03XW91" UREA
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "^urea$"))) |> union(
-# "C04AX57" VINCAMINA, COMBINACIONES CON	
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "vincamine"))) |> union(
-# "J05AC91" AMANTADINA
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "amantadine"))) |> union(
-# "L03AX91" FOSFOGLICOPEPTICAL
-standards_concepts |> filter(
-  str_detect(concept_name, "^Glycopeptide$"))) |> union(
-# "M01AX93" ISONIXINA
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "^isoniazid"))) |> union(
-# "M01BA92" INDOMETACINA Y PREDNISONA, COMBINACIONES CON	
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "^indomethacin"))) |> union(
-# "N02BG91" CLONIXINATO DE LISINA	
-standards_concepts |> filter(
-  str_detect(concept_name, "Arginine \\+ Lysine"))) |> union(
-# "N05BA51" DIAZEPAM, COMBINACIONES CON	
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "^diazepam"))) |> union(
-# "N05BA91" BENTAZEPAM
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "^BENTAZEPAM"))) |> union(
-# "N05CM93" GLUTAMATO MAGNESICO BROMHIDRATO	
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "^magnesium glutamate"))) |> union(
-# "N06BX54" DEANOL, COMBINACIONES CON	
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "^deanol"))) |> union(
-# "N06BX95" GABOB EN COMBINACION	
-standards_concepts |> filter(concept_class_id == "Substance",
-  str_detect(concept_name, "^Gamma-aminobutyric acid"))) |> union(
-# "R05CZ95" SULFONAMIDAS ASOCIADAS A MUCOLITICO Y/O EXPECTORANTE	
-standards_concepts |> filter(concept_class_id == "Substance",
-  str_detect(concept_name, "^Sulfonamide$"))) |> union(
-# "R05DA91" DIHIDROCODEINA
-standards_concepts |> filter(concept_class_id == "Ingredient",
-  str_detect(concept_name, "^dihydrocodeine")))
+# ATC MAPPING (NOT USED NOW)
+# # gaia drug_concept_id (atc level) mapping-----------------------------------
+# atc_concepts <- concepts_vocabulary |> 
+#   filter(concept_code %in% (gaia_clinical_drugs5 |> 
+#                               distinct(atc_cod) |>  pull()))
+# 
+# atc_concept_codes <- atc_concepts |> 
+#   distinct(concept_id) |> pull()
+# 
+# missing_presentations <- gaia_clinical_drugs5 |> 
+#  anti_join(atc_concepts, by = c(atc_cod = "concept_code")) 
+# 
+# missing_atc_cod_desc <- missing_presentations |> 
+#   distinct(atc_cod, atc_desc) |> 
+#   arrange(atc_cod)
+# 
+# missing_atc_source_codes <- missing_atc_cod_desc |> pull(atc_cod)
 
 ```
 
 
 ```{r}
-# mapped but with no relationship--------------------------------------------
-gaia_clinical_drugs5 |> filter(atc_cod %in% c(
-  "R05CB10", "R05DA20", "R05CA10", "R05FA02", "R01AX30"))
-# For now 0. Is better use pres_farma_desc instead of atc_cod
+# # search manually atc unmaped codes------------------------------------------
+# unmpaded_atc_codes_to_standard <- standards_concepts |> 
+#   # "A10BB91" GLISENTIDA
+#   filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "GLISENTIDE")) |> union(
+# # "C01BA92" HIDROQUINIDINA
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "hydroquinidine"))) |> union(
+# # "C01BB91" FENITOINA
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "^phenytoin"))) |> union(
+# # "C03XW91" UREA
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "^urea$"))) |> union(
+# # "C04AX57" VINCAMINA, COMBINACIONES CON	
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "vincamine"))) |> union(
+# # "J05AC91" AMANTADINA
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "amantadine"))) |> union(
+# # "L03AX91" FOSFOGLICOPEPTICAL
+# standards_concepts |> filter(
+#   str_detect(concept_name, "^Glycopeptide$"))) |> union(
+# # "M01AX93" ISONIXINA
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "^isoniazid"))) |> union(
+# # "M01BA92" INDOMETACINA Y PREDNISONA, COMBINACIONES CON	
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "^indomethacin"))) |> union(
+# # "N02BG91" CLONIXINATO DE LISINA	
+# standards_concepts |> filter(
+#   str_detect(concept_name, "Arginine \\+ Lysine"))) |> union(
+# # "N05BA51" DIAZEPAM, COMBINACIONES CON	
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "^diazepam"))) |> union(
+# # "N05BA91" BENTAZEPAM
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "^BENTAZEPAM"))) |> union(
+# # "N05CM93" GLUTAMATO MAGNESICO BROMHIDRATO	
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "^magnesium glutamate"))) |> union(
+# # "N06BX54" DEANOL, COMBINACIONES CON	
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "^deanol"))) |> union(
+# # "N06BX95" GABOB EN COMBINACION	
+# standards_concepts |> filter(concept_class_id == "Substance",
+#   str_detect(concept_name, "^Gamma-aminobutyric acid"))) |> union(
+# # "R05CZ95" SULFONAMIDAS ASOCIADAS A MUCOLITICO Y/O EXPECTORANTE	
+# standards_concepts |> filter(concept_class_id == "Substance",
+#   str_detect(concept_name, "^Sulfonamide$"))) |> union(
+# # "R05DA91" DIHIDROCODEINA
+# standards_concepts |> filter(concept_class_id == "Ingredient",
+#   str_detect(concept_name, "^dihydrocodeine")))
+
+```
+
+
+```{r}
+# # mapped but with no relationship--------------------------------------------
+# gaia_clinical_drugs5 |> filter(atc_cod %in% c(
+#   "R05CB10", "R05DA20", "R05CA10", "R05FA02", "R01AX30"))
 
 ```
 
 ```{r}
 # manual atc drug_concept id relationship-------------------------------------
-manual_atc_drug_relationship <- tibble(
-  drug_concept_id = unmpaded_atc_codes_to_standard$concept_id,
-  drug_source_concept_id = 0,
-  drug_source_value = missing_atc_source_codes
-)
+# manual_atc_drug_relationship <- tibble(
+#   drug_concept_id = unmpaded_atc_codes_to_standard$concept_id,
+#   drug_source_concept_id = 0,
+#   drug_source_value = missing_atc_source_codes
+# )
 
 ```
 
 
 ```{r}
 # obtain atc concepts relationships------------------------------------------
-concepts_relationship_atc <- concepts_relationship |> 
-  filter(relationship_id == "Maps to") |> 
-  filter(concept_id_1 %in% atc_concept_codes)  |> 
-  filter(concept_id_2 %in% standard_concept_codes) |> 
-  left_join(atc_concepts |> 
-              select(concept_code, concept_id_1 = concept_id)) |> 
-  select(drug_concept_id = concept_id_2, 
-         drug_source_concept_id = concept_id_1,
-         drug_source_value = concept_code) |>
-  # add manual relationships
-  union(manual_atc_drug_relationship) |> 
-  tidylog::distinct()
-
-fwrite(concepts_relationship_atc, file.path("Target_tables", 
-                  "AUXILIAR", "concepts_relationship_atc.csv"))
+# concepts_relationship_atc <- concepts_relationship |> 
+#   filter(relationship_id == "Maps to") |> 
+#   filter(concept_id_1 %in% atc_concept_codes)  |> 
+#   filter(concept_id_2 %in% standard_concept_codes) |> 
+#   left_join(atc_concepts |> 
+#               select(concept_code, concept_id_1 = concept_id)) |> 
+#   select(drug_concept_id = concept_id_2, 
+#          drug_source_concept_id = concept_id_1,
+#          drug_source_value = concept_code) |>
+#   # add manual relationships
+#   union(manual_atc_drug_relationship) |> 
+#   tidylog::distinct()
+# 
+# fwrite(concepts_relationship_atc, file.path("Target_tables", 
+#                   "AUXILIAR", "concepts_relationship_atc.csv"))
 
 ```
 
 
 ```{r}
 # check one to many mappings-------------------------------------------------
-list_of_concepts <- concepts_relationship |> 
-  filter(relationship_id == "Maps to") |> 
-  filter(concept_id_1 == 21601312) |> 
-  pull(concept_id_2)
-
-concepts_vocabulary |> filter(concept_id %in% list_of_concepts)
+# list_of_concepts <- concepts_relationship |> 
+#   filter(relationship_id == "Maps to") |> 
+#   filter(concept_id_1 == 21601312) |> 
+#   pull(concept_id_2)
+# 
+# concepts_vocabulary |> filter(concept_id %in% list_of_concepts)
 
 ```
 
@@ -2231,7 +2231,8 @@ from_gaia_to_drug_exposure_0 <- gaia |>
          via_cod,
          via_desc,
          unidades,
-         cadencia) |>
+         cadencia,
+         nforma) |>
   transmute(
     person_source_value = sip,
     # drug_concept_id = "map",
@@ -2246,16 +2247,16 @@ from_gaia_to_drug_exposure_0 <- gaia |>
                                        32825, 32838),
     stop_reason = NA_character_,
     refills = NA_integer_,
-    quantity = 1,
-    days_supply = ceiling(env_durac),
+    quantity = nforma,
+    days_supply = pmax(1, ceiling(env_durac)),
     sig =  glue("{unidades} form(s) each {cadencia} hours"),
     # route_concept_id = "map",
     lot_number = 0, # check if it is mandatory, else NA_integer
     provider_id = NA_integer_,
     visit_occurrence_id = NA_integer_,
     visit_detail_id = NA_integer_,
-    drug_source_value = atc_cod,
-    # drug_source_concept_id = "map",
+    drug_source_value = as.character(pres_farma_cod),
+    drug_source_concept_id = NA_integer_,
     route_source_value = via_desc,
     dose_unit_source_value = NA_character_,
     # select pres_farma_cod for map unmaped codes
@@ -2266,24 +2267,19 @@ from_gaia_to_drug_exposure_0 <- gaia |>
 
 ```
 
-
 ```{r}
 # mapping concept_ids--------------------------------------------------------
 gaia_exported_stcm_to_join <- gaia_exported_stcm |> 
   select(
   pres_farma_cod = source_code,
-  target_concept_id
+  drug_concept_id = target_concept_id
 )
 
 from_gaia_to_drug_exposure <- from_gaia_to_drug_exposure_0 |> 
-  left_join(concepts_relationship_atc, 
-            by = c("drug_source_value")) |>
   left_join(concepts_relationship_route,
             by = c("route_source_value")) |>
   left_join(gaia_exported_stcm_to_join,
             by = c("pres_farma_cod")) |>
-    mutate(drug_concept_id = if_else(is.na(target_concept_id),
-                      drug_concept_id, target_concept_id)) |> 
   mutate(drug_exposure_id = 1:n()) |> 
   relocate(
     drug_exposure_id,
@@ -2310,7 +2306,7 @@ from_gaia_to_drug_exposure <- from_gaia_to_drug_exposure_0 |>
     route_source_value,
     dose_unit_source_value
   ) |> 
-  select(-pres_farma_cod, -target_concept_id)
+  select(-pres_farma_cod)
 
 # check all concepts are mapped---------------------------------------------  
 from_gaia_to_drug_exposure |> filter(is.na(drug_concept_id))
