@@ -200,13 +200,19 @@ It is possible to reopen the Atlas local following the next steps.
 
 - Update the database name (e.g. postgres to postgres2) in "D:\git\ohdsi\WebAPI\WebAPIConfig\settings.xml"
 
+- Update the ***WebAPI.war***. From the root of the WebAPI Project folder `D:\Git\OHDSI\WebAPI` run the following maven command to create the .war file, which will be used to deploy and run WebAPI:
+
+  ```console
+  D:\Git\OHDSI\WebAPI> mvn clean package -DskipUnitTests -DskipITtests -s WebAPIConfig/settings.xml -P    webapi-postgresql
+  ```
+
 - Start tomcat:
 
    ```console
    C:\tomcat\bin> catalina.bat run > ..\logs\webapi.log 2>&1
    ```
 
-- Login and deploy the .war file. 
+- Login and deploy the .war file located at `D:\Git\OHDSI\WebAPI\target\WebAPI.war`.
 
 - Populate the WebAPI tables:
 
