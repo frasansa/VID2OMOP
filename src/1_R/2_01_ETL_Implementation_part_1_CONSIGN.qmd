@@ -2507,16 +2507,16 @@ The target table **measurement** is populated with the information from the sour
 The type of measurement is determined by the *descripcion* variable in the source table as follows:
 
 - Tensión arterial diastólica: 3012888 (Diastolic blood pressure). 
-- Tensión arterial sistólica: 3004249 (Systolic blood pressure). 
+- Tensión Arterial Sistólica: 3004249 (Systolic blood pressure). 
 - Talla: 3015514 (Body height –standing) 
-- Peso: 3025315 (Body weight) 
+- Peso/Peso Medio: 3025315 (Body weight) 
 - Índice de Masa Corporal: 3038553 (Body mass index (BMI) [Ratio]).
 
 ```{r}
 # check concepts-------------------------------------------------------------
 # Tensión arterial diastólica
 concepts_vocabulary |> filter(concept_id == 3012888)
-# Tensión arterial sistólica
+# Tensión Arterial Sistólica
 concepts_vocabulary |> filter(concept_id == 3004249)
 # Talla
 concepts_vocabulary |> filter(concept_id == 3015514)
@@ -2547,9 +2547,10 @@ from_tests_to_measurement <- tests |>
     person_source_value = sip,
     measurement_concept_id = case_when(
       descripcion == "Tensión arterial diastólica" ~ 3012888,
-      descripcion == "Tensión arterial sistólica" ~ 3004249,
+      descripcion == "Tensión Arterial Sistólica" ~ 3004249,
       descripcion == "Talla" ~ 3015514,
       descripcion == "Peso" ~ 3025315,
+      descripcion == "Peso Medio" ~ 3025315,
       descripcion == "Índice de Masa Corporal" ~ 3038553,
       T ~ 0),
     measurement_date = fecha,
@@ -2585,12 +2586,21 @@ descripcion != "Índice de Masa Corporal", 32836, 32880),
     person_id
     )
 
+# check mapping
+from_tests_to_measurement |> filter(measurement_concept_id == 0)
+
+```
+
+
+```{r}
 # write table----------------------------------------------------------------
 fwrite(from_tests_to_measurement, append = FALSE,
        file = file.path("Target_tables", "AUXILIAR",
                         "measurement_vid_0.csv"))
 
 last_test_measurement_id <- max(from_tests_to_measurement$measurement_id)
+
+
 
 ```
 
