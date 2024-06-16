@@ -174,7 +174,7 @@ It is possible to reopen the Atlas local following the next steps.
 
 In the next section, the instructions for updating the instance are provided together with the execution time of each step (in green).
 
-## Steps to update the instance <span style="color:green">(*~27h*)</span>.
+## Steps to update the instance $${\color{green}(*~27h*)}$$.
 
 ### 1. Create a PostgreSQL Database <span style="color:green">(*~19h*)</span>
 
