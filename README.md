@@ -172,17 +172,36 @@ It is possible to reopen the Atlas local following the next steps.
 
 - Run the CatalogueExport tool (<https://github.com/EHDEN/CatalogueExport>).
 
-## Steps to update the instance
+In the next section, the instructions for updating the instance are provided together with the execution time of each step (in green).
 
-### 1. Create a PostgreSQL Database
+## Steps to update the instance <span style="color:green">(*~27h*)</span>.
 
-- Create staged tables from R (.qmd) scripts.
+### 1. Create a PostgreSQL Database <span style="color:green">(*~19h*)</span>
+
+- Create staged tables from R (.qmd) scripts <span style="color:green">(*~4h*)</span>.
+
+  - 2_01_ETL_Implementation_part_1_CONSIGN.qmd <span style="color:green">(*~3h*)</span>.
+  - 2_02_ETL_Implementation_part_2_CONSIGN.qmd <span style="color:green">(*~1h*)</span>.
+
+<!-- This empty comment is to enforce a blank line -->
 
 - Create a new PostgreSQL database (e.g. postgres2).
 
 - Create a schema: 'vid_consign'.
 
-- Run the .sql instructions.
+- Run the .sql instructions <span style="color:green">(*~8h*)</span>.
+
+  - 1_OMOPCDM_postgresql_5.4_ddl.sql <span style="color:green">(*~1s*)</span>.
+  - 2_OMOPCDM_postgresql_5.4_vocabulary_load.sql <span style="color:green">(*~30min*)</span>.
+  - 3_1_OMOPCDM_postgresql_5.4_populate_tables_vid.sql <span style="color:green">(*~1h*)</span>.
+  - 3_2_OMOPCDM_postgresql_5.4_populate_tables_vid.sql <span style="color:green">(*~1h*)</span>.
+  - 3_3_OMOPCDM_postgresql_5.4_populate_condition_era.sql <span style="color:green">(*~1h*)</span>.
+  - 3_4_OMOPCDM_postgresql_5.4_populate_drug_era.sql <span style="color:green">(*~45min*)</span>.
+  - 4_OMOPCDM_postgresql_5.4_primary_keys.sql <span style="color:green">(*~15min*)</span>.
+  - 5_OMOPCDM_postgresql_5.4_indices.sql <span style="color:green">(*~3h*)</span>.
+  - 6_OMOPCDM_postgresql_5.4_constraints.sql <span style="color:green">(*~15min*)</span>.  
+
+<!-- This empty comment is to enforce a blank line -->
 
 - Create a schema: 'vid_consign_results' to store Achilles and DataQualityDashboard results.
 
@@ -190,9 +209,9 @@ It is possible to reopen the Atlas local following the next steps.
 
 - Create a schema: 'webapi' to store temporal files.
 
-- Run the Achilles tool (<https://github.com/OHDSI/Achilles>).
+- Run the [Achilles tool](https://github.com/OHDSI/Achilles)  <span style="color:green">(*~7h*)</span>.
 
-### 2. Deploy a Local Atlas Instance
+### 2. Deploy a Local Atlas Instance <span style="color:green">(*~1h*)</span>
 
 - Delete the "C:\tomcat\webapps\WebAPI.war" file.
 
@@ -220,7 +239,7 @@ It is possible to reopen the Atlas local following the next steps.
   http://localhost:8080/WebAPI/ddl/results?dialect=postgresql&schema=vid_consign_results&vocabSchema=vid_consign&tempSchema=vid_consign_temp&initConceptHierarchy=true
   ```
   
-  - A SQL script has been generated. Run it in the pgadmin 4.
+  - A SQL script has been generated. Run it in the pgadmin 4 <span style="color:green">(*~30min*)</span>.
   
 - Define *source* and *source_daimon* tables (sql scripts).
 
@@ -228,12 +247,12 @@ It is possible to reopen the Atlas local following the next steps.
 
 - Check that everything is OK at <http://localhost:8080/Atlas>.
 
-### 3. Run the tools
+### 3. Run the tools <span style="color:green">(*~7h*)</span>
 
-- Run the DataQualityDashboard tool (<https://github.com/OHDSI/DataQualityDashboard>).
-- Run the CatalogueExport tool (<https://github.com/EHDEN/CatalogueExport>)
-- Run the CDMOnboarding tool (<https://github.com/darwin-eu/CdmOnboarding>)
-- Run the DashboardExport tool (<https://github.com/darwin-eu/DashboardExport>) 
+- Run the [DataQualityDashboard tool](https://github.com/OHDSI/DataQualityDashboard) <span style="color:green">(*~3h*)</span>.
+- Run the [CatalogueExport tool](https://github.com/EHDEN/CatalogueExport) <span style="color:green">(*~30min*)</span>.
+- Run the [CDMOnboarding tool](https://github.com/darwin-eu/CdmOnboarding) <span style="color:green">(*~20min*)</span>.
+- Run the [DashboardExport tool](https://github.com/darwin-eu/DashboardExport) <span style="color:green">(*~3h*)</span>.
 
 ## License
 
