@@ -172,16 +172,16 @@ It is possible to reopen the Atlas local following the next steps.
 
 - Run the CatalogueExport tool (<https://github.com/EHDEN/CatalogueExport>).
 
-In the next section, the instructions for updating the instance are provided together with the execution time of each step (in green).
+In the next section, the instructions for updating the instance are provided together with the ${\color{green}{\text{execution time of each step (in green)}}}$.
 
 ## Steps to update the instance ${\color{green}{(\approx27h)}}$.
 
-### 1. Create a PostgreSQL Database <span style="color:green">(*~19h*)</span>
+### 1. Create a PostgreSQL Database ${\color{green}{(\approx19h)}}$
 
-- Create staged tables from R (.qmd) scripts <span style="color:green">(*~4h*)</span>.
+- Create staged tables from R (.qmd) scripts ${\color{green}{(\approx4h)}}$.
 
-  - 2_01_ETL_Implementation_part_1_CONSIGN.qmd <span style="color:green">(*~3h*)</span>.
-  - 2_02_ETL_Implementation_part_2_CONSIGN.qmd <span style="color:green">(*~1h*)</span>.
+  - 2_01_ETL_Implementation_part_1_CONSIGN.qmd ${\color{green}{(\approx3h)}}$.
+  - 2_02_ETL_Implementation_part_2_CONSIGN.qmd ${\color{green}{(\approx1h)}}$.
 
 <!-- This empty comment is to enforce a blank line -->
 
@@ -189,17 +189,17 @@ In the next section, the instructions for updating the instance are provided tog
 
 - Create a schema: 'vid_consign'.
 
-- Run the .sql instructions <span style="color:green">(*~8h*)</span>.
+- Run the .sql instructions ${\color{green}{(\approx8h)}}$.
 
-  - 1_OMOPCDM_postgresql_5.4_ddl.sql <span style="color:green">(*~1s*)</span>.
-  - 2_OMOPCDM_postgresql_5.4_vocabulary_load.sql <span style="color:green">(*~30min*)</span>.
-  - 3_1_OMOPCDM_postgresql_5.4_populate_tables_vid.sql <span style="color:green">(*~1h*)</span>.
-  - 3_2_OMOPCDM_postgresql_5.4_populate_tables_vid.sql <span style="color:green">(*~1h*)</span>.
-  - 3_3_OMOPCDM_postgresql_5.4_populate_condition_era.sql <span style="color:green">(*~1h*)</span>.
-  - 3_4_OMOPCDM_postgresql_5.4_populate_drug_era.sql <span style="color:green">(*~45min*)</span>.
-  - 4_OMOPCDM_postgresql_5.4_primary_keys.sql <span style="color:green">(*~15min*)</span>.
-  - 5_OMOPCDM_postgresql_5.4_indices.sql <span style="color:green">(*~3h*)</span>.
-  - 6_OMOPCDM_postgresql_5.4_constraints.sql <span style="color:green">(*~15min*)</span>.  
+  - 1_OMOPCDM_postgresql_5.4_ddl.sql ${\color{green}{(\approx1s)}}$.
+  - 2_OMOPCDM_postgresql_5.4_vocabulary_load.sql ${\color{green}{(\approx30min)}}$.
+  - 3_1_OMOPCDM_postgresql_5.4_populate_tables_vid.sql ${\color{green}{(\approx1h)}}$.
+  - 3_2_OMOPCDM_postgresql_5.4_populate_tables_vid.sql ${\color{green}{(\approx1h)}}$.
+  - 3_3_OMOPCDM_postgresql_5.4_populate_condition_era.sql ${\color{green}{(\approx1h)}}$.
+  - 3_4_OMOPCDM_postgresql_5.4_populate_drug_era.sql ${\color{green}{(\approx45min)}}$.
+  - 4_OMOPCDM_postgresql_5.4_primary_keys.sql ${\color{green}{(\approx15min)}}$.
+  - 5_OMOPCDM_postgresql_5.4_indices.sql ${\color{green}{(\approx3h)}}$.
+  - 6_OMOPCDM_postgresql_5.4_constraints.sql ${\color{green}{(\approx15min)}}$.  
 
 <!-- This empty comment is to enforce a blank line -->
 
@@ -209,9 +209,9 @@ In the next section, the instructions for updating the instance are provided tog
 
 - Create a schema: 'webapi' to store temporal files.
 
-- Run the [Achilles tool](https://github.com/OHDSI/Achilles)  <span style="color:green">(*~7h*)</span>.
+- Run the [Achilles tool](https://github.com/OHDSI/Achilles) ${\color{green}{(\approx7h)}}$.
 
-### 2. Deploy a Local Atlas Instance <span style="color:green">(*~1h*)</span>
+### 2. Deploy a Local Atlas Instance ${\color{green}{(\approx1h)}}$
 
 - Delete the "C:\tomcat\webapps\WebAPI.war" file.
 
@@ -239,7 +239,7 @@ In the next section, the instructions for updating the instance are provided tog
   http://localhost:8080/WebAPI/ddl/results?dialect=postgresql&schema=vid_consign_results&vocabSchema=vid_consign&tempSchema=vid_consign_temp&initConceptHierarchy=true
   ```
   
-  - A SQL script has been generated. Run it in the pgadmin 4 <span style="color:green">(*~30min*)</span>.
+  - A SQL script has been generated. Run it in the pgadmin 4 ${\color{green}{(\approx30min)}}$.
   
 - Define *source* and *source_daimon* tables (sql scripts).
 
@@ -247,12 +247,12 @@ In the next section, the instructions for updating the instance are provided tog
 
 - Check that everything is OK at <http://localhost:8080/Atlas>.
 
-### 3. Run the tools <span style="color:green">(*~7h*)</span>
+### 3. Run the tools ${\color{green}{(\approx7h)}}$
 
-- Run the [DataQualityDashboard tool](https://github.com/OHDSI/DataQualityDashboard) <span style="color:green">(*~3h*)</span>.
-- Run the [CatalogueExport tool](https://github.com/EHDEN/CatalogueExport) <span style="color:green">(*~30min*)</span>.
-- Run the [CDMOnboarding tool](https://github.com/darwin-eu/CdmOnboarding) <span style="color:green">(*~20min*)</span>.
-- Run the [DashboardExport tool](https://github.com/darwin-eu/DashboardExport) <span style="color:green">(*~3h*)</span>.
+- Run the [DataQualityDashboard tool](https://github.com/OHDSI/DataQualityDashboard) ${\color{green}{(\approx3h)}}$.
+- Run the [CatalogueExport tool](https://github.com/EHDEN/CatalogueExport) ${\color{green}{(\approx30min)}}$.
+- Run the [CDMOnboarding tool](https://github.com/darwin-eu/CdmOnboarding) ${\color{green}{(\approx20min)}}$.
+- Run the [DashboardExport tool](https://github.com/darwin-eu/DashboardExport) ${\color{green}{(\approx3h)}}$.
 
 ## License
 
