@@ -231,9 +231,9 @@ It is possible to reopen the Atlas local following the next steps.
 ### 3. Run the tools
 
 - Run the DataQualityDashboard tool (<https://github.com/OHDSI/DataQualityDashboard>).
-- Run the catalogueexport tool (<https://github.com/EHDEN/CatalogueExport>)
-- Run the cdmonboarding tool (<https://github.com/darwin-eu/CdmOnboarding>)
-- Run the dashboardexport tool (<https://github.com/darwin-eu/DashboardExport>) 
+- Run the CatalogueExport tool (<https://github.com/EHDEN/CatalogueExport>)
+- Run the CDMOnboarding tool (<https://github.com/darwin-eu/CdmOnboarding>)
+- Run the DashboardExport tool (<https://github.com/darwin-eu/DashboardExport>) 
 
 ## License
 
